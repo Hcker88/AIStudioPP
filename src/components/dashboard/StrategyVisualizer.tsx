@@ -35,15 +35,15 @@ export function StrategyVisualizer({ income, expenses, loans, recommendedRoi }: 
   };
 
   return (
-    <div className="bg-white/5 border border-white/10 p-8 rounded-sm space-y-8">
-      <div className="flex justify-between items-end">
+    <div className="bg-white/5 border border-white/10 p-4 md:p-8 rounded-sm space-y-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 md:gap-0">
         <div>
           <h3 className="text-xs font-mono opacity-40 uppercase tracking-widest">Projection Engine</h3>
-          <p className="text-3xl font-bold mt-1 italic serif">The Opportunity Cost.</p>
+          <p className="text-2xl md:text-3xl font-bold mt-1 italic serif">The Opportunity Cost.</p>
         </div>
-        <div className="text-right">
+        <div className="w-full md:w-auto md:text-right">
           <label className="block text-[10px] uppercase tracking-widest opacity-40 mb-2">Extra Monthly Contribution</label>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <input 
               type="range" 
               min="0" 
@@ -51,14 +51,14 @@ export function StrategyVisualizer({ income, expenses, loans, recommendedRoi }: 
               step="1000"
               value={extraMonthly}
               onChange={(e) => setExtraMonthly(Number(e.target.value))}
-              className="accent-[#F27D26] w-48 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
+              className="accent-[#F27D26] w-full sm:w-48 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
             />
             <span className="text-xl font-bold text-[#F27D26] font-mono w-32">₹{extraMonthly.toLocaleString('en-IN')}</span>
           </div>
         </div>
       </div>
 
-      <div className="h-[350px] w-full">
+      <div className="h-[250px] md:h-[350px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <defs>
@@ -112,18 +112,18 @@ export function StrategyVisualizer({ income, expenses, loans, recommendedRoi }: 
         </ResponsiveContainer>
       </div>
 
-      <div className="grid grid-cols-3 gap-8 pt-4 border-t border-white/10">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-8 pt-4 border-t border-white/10">
         <div>
           <p className="text-[10px] opacity-30 uppercase tracking-widest mb-1">5 Year Delta</p>
-          <p className="text-xl font-bold">+{formatCurrency(data[5].netWorthB - data[5].netWorthA)}</p>
+          <p className="text-lg md:text-xl font-bold">+{formatCurrency(data[5].netWorthB - data[5].netWorthA)}</p>
         </div>
         <div>
           <p className="text-[10px] opacity-30 uppercase tracking-widest mb-1">10 Year Delta</p>
-          <p className="text-xl font-bold">+{formatCurrency(data[10].netWorthB - data[10].netWorthA)}</p>
+          <p className="text-lg md:text-xl font-bold">+{formatCurrency(data[10].netWorthB - data[10].netWorthA)}</p>
         </div>
         <div>
           <p className="text-[10px] opacity-30 uppercase tracking-widest mb-1">20 Year Delta</p>
-          <p className="text-xl font-bold text-[#F27D26]">+{formatCurrency(data[20].netWorthB - data[20].netWorthA)}</p>
+          <p className="text-lg md:text-xl font-bold text-[#F27D26]">+{formatCurrency(data[20].netWorthB - data[20].netWorthA)}</p>
         </div>
       </div>
     </div>

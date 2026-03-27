@@ -29,7 +29,7 @@ const __dirname = path.dirname(__filename);
 const oauth2Client = new OAuth2Client(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  `${process.env.APP_URL || 'http://localhost:3000'}/auth/callback`
+  `${process.env.APP_URL || 'http://localhost:5173'}/auth/google/callback`
 );
 
 async function startServer() {
@@ -66,7 +66,7 @@ async function startServer() {
     }
   });
 
-  app.get("/auth/callback", async (req, res) => {
+  app.get("/auth/google/callback", async (req, res) => {
     const { code } = req.query;
     try {
       const { tokens } = await oauth2Client.getToken(code as string);

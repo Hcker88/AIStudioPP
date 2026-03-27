@@ -10,17 +10,33 @@ import { Zap } from 'lucide-react';
 interface FreedomClockProps {
   initialSeconds: number;
   variant?: 'DEFAULT' | 'COMPACT';
+  principal?: number;
+  annualInterestRate?: number;
 }
 
-export function FreedomClock({ initialSeconds, variant = 'DEFAULT' }: FreedomClockProps) {
+export function FreedomClock({ 
+  initialSeconds, 
+  variant = 'DEFAULT',
+  principal = 0,
+  annualInterestRate = 0
+}: FreedomClockProps) {
   const [seconds, setSeconds] = useState(initialSeconds);
+  const [currentInterest, setCurrentInterest] = useState(0);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setSeconds(prev => Math.max(0, prev - 1));
+      
+      // Calculate real-time interest accumulation if data is provided
+      if (principal > 0 && annualInterestRate > 0) {
+        // Indian banks typically compound monthly, but calculate daily interest
+        const dailyRate = (annualInterestRate / 100) / 365;
+        const interestPerSecond = (principal * dailyRate) / (24 * 60 * 60);
+        setCurrentInterest(prev => prev + interestPerSecond);
+      }
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [principal, annualInterestRate]);
 
   const timeString = useMemo(() => {
     const days = Math.floor(seconds / (24 * 3600));
@@ -40,15 +56,22 @@ export function FreedomClock({ initialSeconds, variant = 'DEFAULT' }: FreedomClo
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 text-[#F27D26]">
-        <Zap size={12} className="animate-pulse" />
-        <span className="text-[10px] font-bold uppercase tracking-widest">Freedom Clock</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-[#F27D26]">
+          <Zap size={12} className="animate-pulse" />
+          <span className="text-[10px] font-bold uppercase tracking-widest">Freedom Clock</span>
+        </div>
+        {principal > 0 && (
+          <div className="text-[10px] font-mono text-red-400 opacity-80">
+            +₹{currentInterest.toFixed(4)} interest added
+          </div>
+        )}
       </div>
       <motion.div 
         key={seconds}
         initial={{ opacity: 0.8 }}
         animate={{ opacity: 1 }}
-        className="text-3xl lg:text-5xl font-bold tracking-tighter font-mono"
+        className="text-3xl lg:text-5xl font-bold tracking-tighter font-mono tabular-nums"
       >
         {timeString}
       </motion.div>

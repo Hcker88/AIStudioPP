@@ -28,13 +28,24 @@ export const dataSanitizer = {
       return { isValid: false, type: 'ERROR', message: 'Please enter a valid number.' };
     }
 
-    // Common error: Entering EMI in interest rate field
-    if (numValue > 100) {
+    if (numValue < 0) {
       return {
         isValid: false,
         type: 'CORRECTION',
-        message: `₹${numValue.toLocaleString('en-IN')} seems high for an interest rate. Did you mean ${numValue / 1000}% or ₹${numValue.toLocaleString('en-IN')} in EMI?`,
-        correctedValue: numValue / 1000 // Heuristic: maybe they meant 5% but typed 5000?
+        message: `Interest rates cannot be negative. We've adjusted it to ${Math.abs(numValue)}%.`,
+        correctedValue: Math.abs(numValue)
+      };
+    }
+
+    // Common error: Entering EMI in interest rate field or impossible rates
+    if (numValue > 100) {
+      // If it's something crazy like 500%, they might have meant 5.00% or 50%
+      const corrected = numValue > 1000 ? numValue / 100 : numValue / 10;
+      return {
+        isValid: false,
+        type: 'CORRECTION',
+        message: `${numValue}% is an impossible interest rate. Did you mean ${corrected}%?`,
+        correctedValue: corrected
       };
     }
 
@@ -61,7 +72,12 @@ export const dataSanitizer = {
     }
 
     if (numValue < 0) {
-      return { isValid: false, type: 'ERROR', message: 'Amount cannot be negative.' };
+      return { 
+        isValid: false, 
+        type: 'CORRECTION', 
+        message: `Amounts cannot be negative. We've adjusted it to ₹${Math.abs(numValue).toLocaleString('en-IN')}.`,
+        correctedValue: Math.abs(numValue)
+      };
     }
 
     // Common error: Monthly income entered as annual

@@ -77,11 +77,30 @@ Example: "Your ICICI Personal Loan is costing you too much. [HIGHLIGHT:ICICI Per
  * Function to inject user context into the system prompt
  */
 export function generateSystemPrompt(userProfile: any, loans: any[], household?: any) {
+  const totalIncome = Number(userProfile.monthlyIncome);
+  const totalDebt = loans.reduce((acc: number, l: any) => acc + Number(l.principalAmount), 0);
+  const totalEmi = loans.reduce((acc: number, l: any) => acc + Number(l.monthlyEmi), 0);
+  
+  // Calculate Debt-to-Income (DTI) ratio
+  const dtiRatio = totalIncome > 0 ? ((totalEmi / totalIncome) * 100).toFixed(1) : '0';
+  
+  let dtiAnalysis = "";
+  if (Number(dtiRatio) > 50) {
+    dtiAnalysis = "CRITICAL: DTI is over 50%. The user is in severe financial distress. Prioritize aggressive debt paydown (Avalanche/Snowball) and immediate expense cutting over investing.";
+  } else if (Number(dtiRatio) > 35) {
+    dtiAnalysis = "WARNING: DTI is between 36-50%. The user is financially stressed. Focus on optimizing high-interest debt and building a 3-month emergency fund.";
+  } else {
+    dtiAnalysis = "HEALTHY: DTI is under 35%. The user has breathing room. Focus on balancing low-interest debt (like Home Loans) with wealth-building investments (SIPs).";
+  }
+
   let context = `
 CURRENT USER PROFILE (₹):
-- Monthly Income: ₹${Number(userProfile.monthlyIncome).toLocaleString('en-IN')}
-- Total Debt: ₹${loans.reduce((acc: number, l: any) => acc + Number(l.principalAmount), 0).toLocaleString('en-IN')}
-- Highest Interest Rate: ${Math.max(...loans.map((l: any) => Number(l.interestRate)), 0)}% (Typical for Personal Loans/Credit Cards in India)
+- Monthly Income: ₹${totalIncome.toLocaleString('en-IN')}
+- Total Debt: ₹${totalDebt.toLocaleString('en-IN')}
+- Total Monthly EMI: ₹${totalEmi.toLocaleString('en-IN')}
+- Debt-to-Income (DTI) Ratio: ${dtiRatio}%
+- DTI Strategy Directive: ${dtiAnalysis}
+- Highest Interest Rate: ${Math.max(...loans.map((l: any) => Number(l.interestRate)), 0)}%
 
 DEBT LIST:
 ${loans.map(l => `- ${l.name}: ₹${Number(l.principalAmount).toLocaleString('en-IN')} @ ${l.interestRate}% (EMI: ₹${Number(l.monthlyEmi).toLocaleString('en-IN')})`).join('\n')}
