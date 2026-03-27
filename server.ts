@@ -26,16 +26,17 @@ declare global {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const oauth2Client = new OAuth2Client(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  `${process.env.APP_URL || 'http://localhost:5173'}/auth/google/callback`
-);
+const oauth2Client = new OAuth2Client({
+  clientId: process.env.GOOGLE_CLIENT_ID,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  redirectUri: `${process.env.APP_URL || 'http://localhost:5173'}/auth/google/callback`
+});
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  app.set('trust proxy', 1);
   app.use(express.json());
   app.use(cookieSession({
     name: 'session',
@@ -67,7 +68,18 @@ async function startServer() {
   });
 
   app.get("/auth/google/callback", async (req, res) => {
-    const { code } = req.query;
+    const { code, error } = req.query;
+    
+    if (error) {
+      console.error("OAuth Error from Google:", error);
+      return res.status(400).send(`Authentication failed: ${error}`);
+    }
+
+    if (!code) {
+      console.error("OAuth Error: No code provided in query string.");
+      return res.status(400).send("Authentication failed: No code provided.");
+    }
+
     try {
       const { tokens } = await oauth2Client.getToken(code as string);
       oauth2Client.setCredentials(tokens);
