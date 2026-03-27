@@ -1,0 +1,5 @@
+{
+  "name": "DebtStrategist AI",
+  "description": "AI-powered financial strategist comparing debt payoff vs. investment ROI with deterministic math and legal guardrails.",
+  "requestFramePermissions": []
+}
