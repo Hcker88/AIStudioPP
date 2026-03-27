@@ -52,11 +52,18 @@ async function startServer() {
 
   // Auth Routes
   app.get("/api/auth/url", (req, res) => {
-    const url = oauth2Client.generateAuthUrl({
-      access_type: 'offline',
-      scope: ['https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/userinfo.email'],
-    });
-    res.json({ url });
+    console.log("Generating auth URL with client ID:", process.env.GOOGLE_CLIENT_ID);
+    try {
+      const url = oauth2Client.generateAuthUrl({
+        access_type: 'offline',
+        scope: ['https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/userinfo.email'],
+      });
+      console.log("Generated URL:", url);
+      res.json({ url });
+    } catch (error) {
+      console.error("Failed to generate auth URL:", error);
+      res.status(500).json({ error: "Failed to generate auth URL" });
+    }
   });
 
   app.get("/auth/callback", async (req, res) => {

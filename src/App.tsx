@@ -105,15 +105,21 @@ function DashboardContent() {
   };
 
   const handleLogin = async () => {
+    console.log("handleLogin triggered");
     try {
       const response = await fetch('/api/auth/url');
+      if (!response.ok) {
+        throw new Error(`Auth URL fetch failed with status: ${response.status}`);
+      }
       const { url } = await response.json();
+      console.log("Opening auth window with URL:", url);
       const authWindow = window.open(url, 'oauth_popup', 'width=600,height=700');
       if (!authWindow) {
         alert('Please allow popups for this site to connect your account.');
       }
     } catch (error) {
       console.error("Login failed:", error);
+      alert("Login failed. Check console for details.");
     }
   };
 
@@ -1198,7 +1204,7 @@ import { runSimulation } from './lib/qa/userSimulator';
 
 // Expose API Key for hidden debugger
 if (typeof window !== 'undefined') {
-  (window as any).GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  (window as any).GEMINI_API_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY;
   (window as any).runSimulation = runSimulation;
 }
 
