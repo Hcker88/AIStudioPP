@@ -78,6 +78,7 @@ function DashboardContent() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(true); // Start with loading for skeleton
+  const [user, setUser] = useState<any>(null);
   const [auditWarning, setAuditWarning] = useState<string | null>(null);
   const [freedomSeconds] = useState(298456320); // Static initial value
   const [netWorthVelocity, setNetWorthVelocity] = useState(12.4); // Mock velocity
@@ -87,6 +88,56 @@ function DashboardContent() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [conciergeMessage, setConciergeMessage] = useState<string | null>(null);
   const [lastActivity, setLastActivity] = useState(Date.now());
+
+  const fetchUser = async () => {
+    try {
+      const response = await fetch('/api/auth/me');
+      const data = await response.json();
+      setUser(data.user);
+      if (data.user) {
+        setStep(2); // Skip landing if logged in
+      }
+    } catch (error) {
+      console.error("Failed to fetch user:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogin = async () => {
+    try {
+      const response = await fetch('/api/auth/url');
+      const { url } = await response.json();
+      const authWindow = window.open(url, 'oauth_popup', 'width=600,height=700');
+      if (!authWindow) {
+        alert('Please allow popups for this site to connect your account.');
+      }
+    } catch (error) {
+      console.error("Login failed:", error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      setUser(null);
+      setStep(0);
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchUser();
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+        fetchUser();
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   // Mock data for demonstration (Indian context)
   const [loans, setLoans] = useState([
@@ -245,6 +296,55 @@ function DashboardContent() {
     }
   };
 
+  if (isLoading) return <DashboardSkeleton />;
+
+  if (!user && step === 0) {
+    return (
+      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 bg-[radial-gradient(circle_at_50%_30%,#3a1510_0%,transparent_60%)]">
+        <div className="max-w-2xl w-full text-center space-y-12">
+          <div className="space-y-4">
+            <h1 className="text-7xl font-bold tracking-tighter italic serif leading-tight">
+              Master Your Debt.<br/>
+              <span className="text-[#F27D26]">Reclaim Your Freedom.</span>
+            </h1>
+            <p className="text-xl text-gray-400 font-light max-w-lg mx-auto">
+              The AI-powered strategist that turns your debt into a roadmap for wealth.
+            </p>
+          </div>
+
+          <div className="flex flex-col items-center gap-6">
+            <button 
+              onClick={handleLogin}
+              className="group relative px-12 py-6 bg-white text-black font-bold text-lg rounded-sm hover:scale-105 transition-all flex items-center gap-3"
+            >
+              <ShieldCheck className="text-[#F27D26]" />
+              SECURE LOGIN WITH GOOGLE
+              <ArrowRight className="group-hover:translate-x-2 transition-transform" />
+            </button>
+            <p className="text-[10px] uppercase tracking-[0.2em] opacity-40">
+              Zero-Knowledge Architecture • Bank-Grade Security
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-8 pt-12 border-t border-white/10">
+            <div className="space-y-2">
+              <div className="text-2xl font-bold italic serif">₹45Cr+</div>
+              <div className="text-[10px] uppercase tracking-widest opacity-40">Interest Saved</div>
+            </div>
+            <div className="space-y-2">
+              <div className="text-2xl font-bold italic serif">12k+</div>
+              <div className="text-[10px] uppercase tracking-widest opacity-40">Families Free</div>
+            </div>
+            <div className="space-y-2">
+              <div className="text-2xl font-bold italic serif">8.4%</div>
+              <div className="text-[10px] uppercase tracking-widest opacity-40">Avg. ROI Boost</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#050505] text-[#E4E3E0] font-sans selection:bg-[#F27D26] selection:text-black">
       {isStale && <StaleDataWarning />}
@@ -367,6 +467,13 @@ function DashboardContent() {
             >
               <Sparkles size={14} />
               {isConciergeEnabled ? 'Concierge Active' : 'Guide Me'}
+            </button>
+
+            <button 
+              onClick={handleLogout}
+              className="px-4 py-2 bg-white/5 border border-white/10 rounded-sm text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-all"
+            >
+              LOGOUT
             </button>
           </div>
         </nav>

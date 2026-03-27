@@ -3,21 +3,111 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+import cookieSession from "cookie-session";
+import { OAuth2Client } from "google-auth-library";
 
 dotenv.config();
 
+declare global {
+  namespace Express {
+    interface Request {
+      session?: {
+        user?: {
+          id: string;
+          email: string;
+          name: string;
+          picture: string;
+        };
+      } | null;
+    }
+  }
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const oauth2Client = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  `${process.env.APP_URL || 'http://localhost:3000'}/auth/callback`
+);
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+  app.use(cookieSession({
+    name: 'session',
+    keys: [process.env.SESSION_SECRET || 'debt-strategist-secret'],
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    secure: true,
+    sameSite: 'none',
+  }));
 
   // API Routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Auth Routes
+  app.get("/api/auth/url", (req, res) => {
+    const url = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: ['https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/userinfo.email'],
+    });
+    res.json({ url });
+  });
+
+  app.get("/auth/callback", async (req, res) => {
+    const { code } = req.query;
+    try {
+      const { tokens } = await oauth2Client.getToken(code as string);
+      oauth2Client.setCredentials(tokens);
+      
+      const ticket = await oauth2Client.verifyIdToken({
+        idToken: tokens.id_token!,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      const payload = ticket.getPayload();
+      
+      if (req.session) {
+        req.session.user = {
+          id: payload?.sub,
+          email: payload?.email,
+          name: payload?.name,
+          picture: payload?.picture,
+        };
+      }
+
+      res.send(`
+        <html>
+          <body>
+            <script>
+              if (window.opener) {
+                window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '*');
+                window.close();
+              } else {
+                window.location.href = '/';
+              }
+            </script>
+            <p>Authentication successful. This window should close automatically.</p>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      console.error("OAuth callback error:", error);
+      res.status(500).send("Authentication failed");
+    }
+  });
+
+  app.get("/api/auth/me", (req, res) => {
+    res.json({ user: req.session?.user || null });
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session = null;
+    res.json({ success: true });
   });
 
   app.get("/api/dashboard/:userId", async (req, res) => {
