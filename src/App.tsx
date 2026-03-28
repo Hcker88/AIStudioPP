@@ -91,7 +91,12 @@ function DashboardContent() {
 
   const fetchUser = async () => {
     try {
-      const response = await fetch('/api/auth/me');
+      const response = await fetch('/api/auth/me?t=' + Date.now(), {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       const data = await response.json();
       setUser(data.user);
       if (data.user) {
@@ -107,7 +112,12 @@ function DashboardContent() {
   const handleLogin = async () => {
     console.log("handleLogin triggered");
     try {
-      const response = await fetch('/api/auth/url');
+      const response = await fetch('/api/auth/url?t=' + Date.now(), {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       if (!response.ok) {
         throw new Error(`Auth URL fetch failed with status: ${response.status}`);
       }

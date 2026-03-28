@@ -26,11 +26,28 @@ declare global {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const oauth2Client = new OAuth2Client({
-  clientId: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  redirectUri: `${process.env.APP_URL || 'http://localhost:5173'}/auth/google/callback`
-});
+const isProduction = process.env.NODE_ENV === 'production';
+const appUrl = process.env.APP_URL || 'http://localhost:3000';
+
+let _oauth2Client: OAuth2Client | null = null;
+
+function getOAuth2Client(): OAuth2Client {
+  if (!_oauth2Client) {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    
+    if (!clientId || !clientSecret) {
+      throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables are required');
+    }
+    
+    _oauth2Client = new OAuth2Client({
+      clientId,
+      clientSecret,
+      redirectUri: `${appUrl}/auth/google/callback`
+    });
+  }
+  return _oauth2Client;
+}
 
 async function startServer() {
   const app = express();
@@ -42,8 +59,8 @@ async function startServer() {
     name: 'session',
     keys: [process.env.SESSION_SECRET || 'debt-strategist-secret'],
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    secure: true,
-    sameSite: 'none',
+    secure: appUrl.startsWith('https://'),
+    sameSite: appUrl.startsWith('https://') ? 'none' : 'lax',
   }));
 
   // API Routes
@@ -55,7 +72,8 @@ async function startServer() {
   app.get("/api/auth/url", (req, res) => {
     console.log("Generating auth URL with client ID:", process.env.GOOGLE_CLIENT_ID);
     try {
-      const url = oauth2Client.generateAuthUrl({
+      const client = getOAuth2Client();
+      const url = client.generateAuthUrl({
         access_type: 'offline',
         scope: ['https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/userinfo.email'],
       });
@@ -70,6 +88,9 @@ async function startServer() {
   app.get("/auth/google/callback", async (req, res) => {
     const { code, error } = req.query;
     
+    console.log("Callback hit. Headers:", req.headers);
+    console.log("Is secure?", req.secure);
+    
     if (error) {
       console.error("OAuth Error from Google:", error);
       return res.status(400).send(`Authentication failed: ${error}`);
@@ -81,10 +102,11 @@ async function startServer() {
     }
 
     try {
-      const { tokens } = await oauth2Client.getToken(code as string);
-      oauth2Client.setCredentials(tokens);
+      const client = getOAuth2Client();
+      const { tokens } = await client.getToken(code as string);
+      client.setCredentials(tokens);
       
-      const ticket = await oauth2Client.verifyIdToken({
+      const ticket = await client.verifyIdToken({
         idToken: tokens.id_token!,
         audience: process.env.GOOGLE_CLIENT_ID,
       });
@@ -97,16 +119,21 @@ async function startServer() {
           name: payload?.name,
           picture: payload?.picture,
         };
+        console.log("Session user set:", req.session.user);
+      } else {
+        console.error("req.session is undefined!");
       }
 
       res.send(`
         <html>
           <body>
             <script>
+              console.log("Sending success message to opener");
               if (window.opener) {
                 window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '*');
                 window.close();
               } else {
+                console.log("No window.opener found");
                 window.location.href = '/';
               }
             </script>

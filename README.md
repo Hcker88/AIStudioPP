@@ -79,7 +79,7 @@ The **Oracle Engine** runs 100 iterations of the user's life path using:
 ---
 
 ## 5. Tech Stack Deep-Dive
-- **Remix/React**: Chosen for SSR (Server-Side Rendering) to ensure the "Executive Briefing" loads in <200ms.
+- **Vite/React**: Chosen for a blazing-fast SPA (Single Page Application) experience, ensuring the "Executive Briefing" loads instantly.
 - **Drizzle ORM**: Provides type-safe, low-latency SQL queries over PostgreSQL.
 - **Gemini 3.1 Pro**: Utilized for high-reasoning strategy pivots and the "Auditor" reality-check layer.
 - **Framer Motion**: Powers the fluid, high-density Bento UI.

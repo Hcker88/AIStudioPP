@@ -1,13 +1,14 @@
 {
-  "name": "react-example",
+  "name": "debtstrategist-ai",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
+    "start": "node server.ts",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist",
+    "clean": "node -e \"fs.rmSync('dist', {recursive:true, force:true})\"",
     "lint": "tsc --noEmit",
     "launch": "npm install && npx drizzle-kit push && npm run dev"
   },

@@ -3,7 +3,18 @@ import { db } from "../lib/db";
 import { marketSnapshots } from "../lib/schema";
 import { desc } from "drizzle-orm";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let _ai: GoogleGenAI | null = null;
+
+function getAi(): GoogleGenAI {
+  if (!_ai) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY environment variable is required');
+    }
+    _ai = new GoogleGenAI({ apiKey });
+  }
+  return _ai;
+}
 
 export const marketWatcher = {
   /**
@@ -11,6 +22,7 @@ export const marketWatcher = {
    */
   async refreshMarketPulse() {
     try {
+      const ai = getAi();
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: "What is the current Nifty 50 level and the RBI Repo Rate in India? Return as JSON: { \"nifty50\": number, \"repoRate\": number }",
