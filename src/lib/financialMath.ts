@@ -62,5 +62,6 @@ export function calculateInterestSaved(principal: number, annualRate: number, mo
  * Calculates Burn Rate
  */
 export function calculateBurnRate(income: number, totalExpenses: number, totalEmis: number): number {
+  if (income <= 0) return 100; // Cap at 100% or return a high number to prevent Infinity
   return (totalExpenses + totalEmis) / income;
 }

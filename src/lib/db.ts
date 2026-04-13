@@ -2,7 +2,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 
-let _db: ReturnType<typeof drizzle> | null = null;
+let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
 export const getDb = () => {
   if (!_db) {
@@ -20,7 +20,7 @@ export const getDb = () => {
 // For backward compatibility where db is imported directly
 // This will throw if DATABASE_URL is missing when the file is loaded
 // so we use a proxy to delay initialization until it's actually used
-export const db = new Proxy({} as ReturnType<typeof drizzle>, {
+export const db = new Proxy({} as ReturnType<typeof drizzle<typeof schema>>, {
   get: (target, prop) => {
     return (getDb() as any)[prop];
   }

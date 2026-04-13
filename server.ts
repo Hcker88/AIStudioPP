@@ -81,7 +81,7 @@ async function startServer() {
       res.json({ url });
     } catch (error) {
       console.error("Failed to generate auth URL:", error);
-      res.status(500).json({ error: "Failed to generate auth URL" });
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to generate auth URL" });
     }
   });
 
@@ -112,13 +112,15 @@ async function startServer() {
       });
       const payload = ticket.getPayload();
       
+      const userData = {
+        id: payload?.sub,
+        email: payload?.email,
+        name: payload?.name,
+        picture: payload?.picture,
+      };
+
       if (req.session) {
-        req.session.user = {
-          id: payload?.sub,
-          email: payload?.email,
-          name: payload?.name,
-          picture: payload?.picture,
-        };
+        req.session.user = userData;
         console.log("Session user set:", req.session.user);
       } else {
         console.error("req.session is undefined!");
@@ -130,7 +132,10 @@ async function startServer() {
             <script>
               console.log("Sending success message to opener");
               if (window.opener) {
-                window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '*');
+                window.opener.postMessage({ 
+                  type: 'OAUTH_AUTH_SUCCESS',
+                  user: ${JSON.stringify(userData)}
+                }, '*');
                 window.close();
               } else {
                 console.log("No window.opener found");
@@ -199,9 +204,9 @@ async function startServer() {
 
   app.post("/api/chat", async (req, res) => {
     try {
-      const { userId, message } = req.body;
+      const { userId, message, financialData } = req.body;
       const { handleChatAction } = await import("./src/routes/api.chat.server.js");
-      const response = await handleChatAction(userId, message);
+      const response = await handleChatAction(userId, message, financialData);
       res.json({ response });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Chat failed" });

@@ -29,7 +29,7 @@ export async function generateBurnReport(userId: string) {
     burnRate: (totalExpenses / monthlyIncome) * 100,
     healthScore: totalExpenses / monthlyIncome > 0.7 ? 'CRITICAL' : 'STABLE',
     message: totalExpenses / monthlyIncome > 0.7 
-      ? "Your burn rate is exceeding safe thresholds. You are trading 12 days of retirement for every $500 in non-fixed expenses."
-      : "Strategy is stable. Current spending maintains your 2028 debt-free target."
+      ? "Your expenses are exceeding safe thresholds. High spending is delaying your financial goals."
+      : "Strategy is stable. Current spending maintains your debt-free target."
   };
 }

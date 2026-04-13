@@ -61,6 +61,7 @@ import { SmartActions } from './components/dashboard/SmartActions';
 import { YearInReview } from './components/dashboard/YearInReview';
 import { FreedomClock } from './components/dashboard/FreedomClock';
 import { conciergeLogic } from './lib/ai/concierge';
+import { StressTestEngine } from './components/dashboard/StressTestEngine';
 
 function DashboardContent() {
   const [step, setStep] = useState(0); // 0: Landing, 1: Interrogation, 2: Dashboard
@@ -89,8 +90,11 @@ function DashboardContent() {
   const [conciergeMessage, setConciergeMessage] = useState<string | null>(null);
   const [lastActivity, setLastActivity] = useState(Date.now());
 
+  const [loginError, setLoginError] = useState<string | null>(null);
+
   const fetchUser = async () => {
     try {
+      console.log("Fetching user...");
       const response = await fetch('/api/auth/me?t=' + Date.now(), {
         headers: {
           'Cache-Control': 'no-cache',
@@ -98,12 +102,33 @@ function DashboardContent() {
         }
       });
       const data = await response.json();
-      setUser(data.user);
+      console.log("User data received:", data);
+      
       if (data.user) {
-        setStep(2); // Skip landing if logged in
+        setUser(data.user);
+        localStorage.setItem('debt_strategist_user', JSON.stringify(data.user));
+        // Do not skip to step 2, let them click "Begin Interrogation"
+      } else {
+        console.log("No user found in session. Checking localStorage...");
+        const storedUser = localStorage.getItem('debt_strategist_user');
+        if (storedUser) {
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            console.log("Using user from localStorage:", parsedUser);
+            setUser(parsedUser);
+          } catch (e) {
+            console.error("Failed to parse stored user", e);
+          }
+        }
       }
     } catch (error) {
       console.error("Failed to fetch user:", error);
+      const storedUser = localStorage.getItem('debt_strategist_user');
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch (e) {}
+      }
     } finally {
       setIsLoading(false);
     }
@@ -111,6 +136,7 @@ function DashboardContent() {
 
   const handleLogin = async () => {
     console.log("handleLogin triggered");
+    setLoginError(null);
     try {
       const response = await fetch('/api/auth/url?t=' + Date.now(), {
         headers: {
@@ -119,17 +145,21 @@ function DashboardContent() {
         }
       });
       if (!response.ok) {
-        throw new Error(`Auth URL fetch failed with status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Auth URL fetch failed with status: ${response.status}`);
       }
-      const { url } = await response.json();
-      console.log("Opening auth window with URL:", url);
-      const authWindow = window.open(url, 'oauth_popup', 'width=600,height=700');
+      const data = await response.json();
+      if (!data.url) {
+        throw new Error("No URL returned from server");
+      }
+      console.log("Opening auth window with URL:", data.url);
+      const authWindow = window.open(data.url, 'oauth_popup', 'width=600,height=700');
       if (!authWindow) {
-        alert('Please allow popups for this site to connect your account.');
+        setLoginError('Please allow popups for this site to connect your account.');
       }
     } catch (error) {
       console.error("Login failed:", error);
-      alert("Login failed. Check console for details.");
+      setLoginError(error instanceof Error ? error.message : "Login failed. Check console for details.");
     }
   };
 
@@ -137,6 +167,7 @@ function DashboardContent() {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
       setUser(null);
+      localStorage.removeItem('debt_strategist_user');
       setStep(0);
     } catch (error) {
       console.error("Logout failed:", error);
@@ -147,8 +178,18 @@ function DashboardContent() {
     fetchUser();
 
     const handleMessage = (event: MessageEvent) => {
+      console.log("Received message:", event.data);
       if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
-        fetchUser();
+        console.log("OAuth success message received, fetching user...");
+        if (event.data.user) {
+          console.log("Using user data from postMessage:", event.data.user);
+          setUser(event.data.user);
+          localStorage.setItem('debt_strategist_user', JSON.stringify(event.data.user));
+          // Do not skip to step 2, let them click "Begin Interrogation"
+          setIsLoading(false);
+        } else {
+          fetchUser();
+        }
       }
     };
     window.addEventListener('message', handleMessage);
@@ -161,27 +202,25 @@ function DashboardContent() {
     { name: 'ICICI Personal Loan', principal: 500000, interestRate: 14.5, emi: 12000, tenure: 60 },
   ]);
 
-  const income = 150000;
-  const expenses = 45000;
+  const [income, setIncome] = useState(150000);
+  const [expenses, setExpenses] = useState(45000);
 
   useEffect(() => {
     const totalDebt = loans.reduce((acc, l) => acc + l.principal, 0);
-    const monthlyIncome = 120000; // Mock income
-    const expenses = 45000; // Mock expenses
-    setFinancialData({ totalDebt, monthlyIncome, expenses });
+    setFinancialData({ totalDebt, monthlyIncome: income, expenses });
 
     // Run Audit
     const auditResult = systemAudit.checkInconsistencies(
       loans.map(l => ({ name: l.name, principal: l.principal })),
       expenses,
-      monthlyIncome
+      income
     );
     if (!auditResult.isValid) {
       setAuditWarning(systemAudit.getAIPrompt(auditResult, "Harshit"));
     } else {
       setAuditWarning(null);
     }
-  }, [loans, setFinancialData]);
+  }, [loans, income, expenses, setFinancialData]);
 
   useEffect(() => {
     // Simulate initial load for skeleton
@@ -337,23 +376,28 @@ function DashboardContent() {
               SECURE LOGIN WITH GOOGLE
               <ArrowRight className="group-hover:translate-x-2 transition-transform" />
             </button>
+            {loginError && (
+              <div className="text-red-500 bg-red-500/10 p-4 rounded-md border border-red-500/20 max-w-md text-sm">
+                {loginError}
+              </div>
+            )}
             <p className="text-[10px] uppercase tracking-[0.2em] opacity-40">
               Zero-Knowledge Architecture • Bank-Grade Security
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-8 pt-12 border-t border-white/10">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-12 border-t border-white/10">
             <div className="space-y-2">
-              <div className="text-2xl font-bold italic serif">₹45Cr+</div>
-              <div className="text-[10px] uppercase tracking-widest opacity-40">Interest Saved</div>
+              <div className="text-xl font-bold italic serif">Smart Routing</div>
+              <div className="text-[10px] uppercase tracking-widest opacity-40">Optimize every rupee</div>
             </div>
             <div className="space-y-2">
-              <div className="text-2xl font-bold italic serif">12k+</div>
-              <div className="text-[10px] uppercase tracking-widest opacity-40">Families Free</div>
+              <div className="text-xl font-bold italic serif">Stress Testing</div>
+              <div className="text-[10px] uppercase tracking-widest opacity-40">Prepare for the worst</div>
             </div>
             <div className="space-y-2">
-              <div className="text-2xl font-bold italic serif">8.4%</div>
-              <div className="text-[10px] uppercase tracking-widest opacity-40">Avg. ROI Boost</div>
+              <div className="text-xl font-bold italic serif">AI Advisory</div>
+              <div className="text-[10px] uppercase tracking-widest opacity-40">Personalized guidance</div>
             </div>
           </div>
         </div>
@@ -385,7 +429,7 @@ function DashboardContent() {
             <div className="flex items-center gap-2">
               <span className="font-bold tracking-tighter text-xl uppercase">DEBTSTRATEGIST<span className="text-[#F27D26]">.AI</span></span>
             </div>
-            <GlobalSearch onSearch={(q) => alert(`Oracle searching for: ${q}`)} />
+            <GlobalSearch onSearch={(q) => alert(`Searching for: ${q}`)} />
           </div>
           <div className="flex gap-4">
             {/* Executive Briefing Header */}
@@ -609,18 +653,35 @@ function DashboardContent() {
                 <ConversationForm onComplete={(data) => {
                   console.log('Onboarding Data:', data);
                   setOnboardingData(data);
-                  if (data.loanType === 'None') {
-                    setLoans([]); // Clear mock loans for no-debt users
-                    setNetWorthVelocity(8.5); // Initial wealth velocity
+                  setIncome(data.income);
+                  setExpenses(data.expenses);
+                  
+                  if (data.loans && data.loans.length > 0) {
+                    setLoans(data.loans.map((l: any) => ({
+                      name: l.name,
+                      principal: l.principal,
+                      interestRate: l.rate,
+                      emi: l.emi,
+                      tenure: Math.ceil(l.principal / l.emi) || 60
+                    })));
                   } else {
-                    setLoans([{
-                      name: `${data.loanType} Loan`,
-                      principal: data.emi * 12 * 5, // Heuristic for demo
-                      interestRate: data.rate,
-                      emi: data.emi,
-                      tenure: 60
-                    }]);
+                    setLoans([]);
+                    setNetWorthVelocity(8.5);
                   }
+
+                  if (data.assets && data.assets.length > 0) {
+                    const totalAssets = data.assets.reduce((acc: number, a: any) => acc + a.amount, 0);
+                    const equityAssets = data.assets.filter((a: any) => a.type === 'EQUITY').reduce((acc: number, a: any) => acc + a.amount, 0);
+                    const currentEquity = totalAssets > 0 ? Math.round((equityAssets / totalAssets) * 100) : 0;
+                    const targetEquity = 70; // Default target
+                    setPortfolioDrift({
+                      currentEquity,
+                      targetEquity,
+                      drift: currentEquity - targetEquity,
+                      totalAssets
+                    });
+                  }
+
                   setStep(2);
                 }} />
               </motion.section>
@@ -722,7 +783,7 @@ function DashboardContent() {
                             activeTab === 'ORACLE' ? "text-[#F27D26]" : "opacity-40 hover:opacity-100"
                           )}
                         >
-                          <Sparkles size={10} /> Oracle Engine
+                          <Sparkles size={10} /> Stress Test
                           {activeTab === 'ORACLE' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F27D26]" />}
                         </button>
                       </div>
@@ -1019,9 +1080,11 @@ function DashboardContent() {
                             exit={{ opacity: 0, y: -10 }}
                             className="space-y-8"
                           >
+                            <StressTestEngine />
+                            
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                               <div className="bg-white/5 border border-white/10 p-6 rounded-sm flex flex-col items-center justify-center text-center">
-                                <p className="text-[10px] opacity-40 uppercase tracking-widest mb-4">Strategy Robustness</p>
+                                <p className="text-[10px] opacity-40 uppercase tracking-widest mb-4">Safety Score</p>
                                 <div className="relative w-32 h-32 flex items-center justify-center">
                                   <svg className="w-full h-full transform -rotate-90">
                                     <circle cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-white/5" />
@@ -1034,7 +1097,7 @@ function DashboardContent() {
                                   </svg>
                                   <span className="absolute text-2xl font-bold">{confidenceScore}%</span>
                                 </div>
-                                <p className="text-[10px] mt-4 opacity-60">Monte Carlo Confidence</p>
+                                <p className="text-[10px] mt-4 opacity-60">Stress Test Pass Rate</p>
                               </div>
                               <StatCard label="Worst-Case Net Worth" value={formatINR(1200000, true, isPrivacyMode)} subtext="Inflation @ 8%" isPrivacyMode={isPrivacyMode} />
                               <StatCard label="Best-Case Net Worth" value={formatINR(4500000, true, isPrivacyMode)} subtext="Market @ 14%" isPrivacyMode={isPrivacyMode} />
@@ -1070,7 +1133,7 @@ function DashboardContent() {
                                 <Shield size={24} />
                               </div>
                               <div className="flex-1">
-                                <h4 className="text-sm font-bold uppercase tracking-widest mb-1">Oracle Insight</h4>
+                                <h4 className="text-sm font-bold uppercase tracking-widest mb-1">Stress Test Insight</h4>
                                 <p className="text-xs opacity-60 leading-relaxed">
                                   Your plan has a {confidenceScore}% Confidence Level of succeeding even if the Repo Rate stays high. 
                                   {confidenceScore < 70 && " WARNING: High risk of strategy drift. Consider a 'Hard Pivot' to build liquidity."}
@@ -1103,7 +1166,7 @@ function DashboardContent() {
                         className="p-6 bg-[#F27D26] text-black rounded-sm shadow-[0_0_30px_rgba(242,125,38,0.3)] relative overflow-hidden group cursor-pointer"
                         onClick={() => {
                           triggerCelebration();
-                          alert("Action Executed: ₹4,200 paid to Amex. You just saved 2 days of work!");
+                          alert("Action Executed: ₹4,200 paid to Amex. You avoided future interest equivalent to 2 days of your salary!");
                         }}
                       >
                         <div className="relative z-10">
@@ -1111,7 +1174,8 @@ function DashboardContent() {
                             <Zap size={14} fill="black" />
                             <span className="text-[10px] font-bold uppercase tracking-widest">Top Action Item</span>
                           </div>
-                          <h4 className="text-lg font-bold leading-tight mb-4">Pay ₹4,200 to Amex today to save 2 days of work.</h4>
+                          <h4 className="text-lg font-bold leading-tight mb-2">Pay ₹4,200 extra to Amex today.</h4>
+                          <p className="text-xs font-medium mb-4 opacity-80">This saves enough future interest to equal 2 days of your salary.</p>
                           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
                             Execute Now <ArrowUpRight size={12} />
                           </div>

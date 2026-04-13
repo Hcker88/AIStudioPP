@@ -26,8 +26,8 @@ export function calculateProjections(
 ): ProjectionPoint[] {
   const points: ProjectionPoint[] = [];
   
-  let statusQuoNetWorth = 0;
-  let aiStrategyNetWorth = 0;
+  let assetsA = 0;
+  let assetsB = 0;
   
   // Clone loans for simulation
   let loansA = loans.map(l => ({ ...l }));
@@ -37,10 +37,13 @@ export function calculateProjections(
   loansB.sort((a, b) => b.interestRate - a.interestRate);
 
   for (let y = 0; y <= years; y++) {
+    const totalDebtA = loansA.reduce((sum, l) => sum + l.principal, 0);
+    const totalDebtB = loansB.reduce((sum, l) => sum + l.principal, 0);
+
     points.push({
       year: y,
-      netWorthA: Math.round(statusQuoNetWorth),
-      netWorthB: Math.round(aiStrategyNetWorth)
+      netWorthA: Math.round(assetsA - totalDebtA),
+      netWorthB: Math.round(assetsB - totalDebtB)
     });
 
     // Monthly simulation for the next year
@@ -50,14 +53,25 @@ export function calculateProjections(
       for (const loan of loansA) {
         if (loan.principal > 0) {
           const interest = (loan.principal * (loan.interestRate / 100)) / 12;
-          const principalPaid = Math.min(loan.principal, Math.max(0, loan.emi - interest));
+          const principalPaid = loan.emi - interest;
           loan.principal -= principalPaid;
+          if (loan.principal < 0) loan.principal = 0; // Cap at 0
           monthlySavingsA -= loan.emi;
         }
       }
-      // Invest remaining savings at FD rates (7%)
-      statusQuoNetWorth += monthlySavingsA;
-      statusQuoNetWorth *= (1 + statusQuoRoi / 100 / 12);
+      
+      if (monthlySavingsA >= 0) {
+        assetsA += monthlySavingsA;
+        assetsA *= (1 + statusQuoRoi / 100 / 12);
+      } else {
+        // If savings are negative, we eat into assets. If assets < 0, it's effectively unsecured debt.
+        assetsA += monthlySavingsA;
+        if (assetsA > 0) {
+          assetsA *= (1 + statusQuoRoi / 100 / 12);
+        } else {
+          assetsA *= (1 + 18 / 100 / 12); // Assume 18% penalty debt rate for negative assets
+        }
+      }
 
       // --- Timeline B: AI Strategy ---
       let monthlySavingsB = monthlyIncome - monthlyExpenses;
@@ -66,8 +80,9 @@ export function calculateProjections(
       for (const loan of loansB) {
         if (loan.principal > 0) {
           const interest = (loan.principal * (loan.interestRate / 100)) / 12;
-          const standardPrincipalPaid = Math.min(loan.principal, Math.max(0, loan.emi - interest));
+          const standardPrincipalPaid = loan.emi - interest;
           loan.principal -= standardPrincipalPaid;
+          if (loan.principal < 0) loan.principal = 0;
           monthlySavingsB -= loan.emi;
           
           // Apply extra payment to highest interest loan
@@ -79,11 +94,20 @@ export function calculateProjections(
         }
       }
       
-      // Invest remaining savings + unused extra payment at Equity ROI (12%)
-      // CRITICAL: If net worth is negative, prioritize liquidity (Survival Mode)
-      const currentRoi = aiStrategyNetWorth < 0 ? 4 : investmentRoi; // 4% for liquid savings vs 12% for equity
-      aiStrategyNetWorth += (monthlySavingsB + availableForExtra);
-      aiStrategyNetWorth *= (1 + currentRoi / 100 / 12);
+      const totalCashB = monthlySavingsB + availableForExtra;
+      if (totalCashB >= 0) {
+        assetsB += totalCashB;
+        // CRITICAL: If net worth is negative, prioritize liquidity (Survival Mode)
+        const currentRoi = (assetsB - loansB.reduce((sum, l) => sum + l.principal, 0)) < 0 ? 4 : investmentRoi;
+        assetsB *= (1 + currentRoi / 100 / 12);
+      } else {
+        assetsB += totalCashB;
+        if (assetsB > 0) {
+          assetsB *= (1 + investmentRoi / 100 / 12);
+        } else {
+          assetsB *= (1 + 18 / 100 / 12); // Assume 18% penalty debt rate for negative assets
+        }
+      }
     }
   }
 

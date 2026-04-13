@@ -138,7 +138,7 @@ export function SmartActions() {
         <ActionCard 
           type="WIN"
           title="Save ₹4,500: Prepay ICICI today."
-          description="By moving ₹4,500 from your idle savings to your ICICI Personal Loan, you shave 2 days off your work life."
+          description="By moving ₹4,500 from your idle savings to your ICICI Personal Loan, you avoid future interest equivalent to 2 days of your salary."
           onClick={() => handleExecute('PREPAY_LOAN', () => alert("Executing ICICI Prepayment Strategy..."))}
         />
         <ActionCard 

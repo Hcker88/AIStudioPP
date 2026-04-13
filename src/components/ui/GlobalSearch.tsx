@@ -57,7 +57,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onSearch }) => {
         className="flex items-center gap-3 px-4 py-2 bg-white/5 border border-white/10 rounded-sm hover:bg-white/10 transition-all group"
       >
         <Search size={14} className="opacity-40 group-hover:opacity-100" />
-        <span className="text-[10px] uppercase tracking-widest opacity-40 group-hover:opacity-100">Ask the Oracle...</span>
+        <span className="text-[10px] uppercase tracking-widest opacity-40 group-hover:opacity-100">Ask the AI...</span>
         <div className="flex items-center gap-1 ml-4 px-1.5 py-0.5 bg-white/10 rounded-sm">
           <Command size={10} className="opacity-40" />
           <span className="text-[9px] font-bold opacity-40">K</span>
@@ -129,7 +129,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onSearch }) => {
                     <span className="text-[9px] opacity-40 uppercase tracking-widest">Close</span>
                   </div>
                 </div>
-                <span className="text-[9px] opacity-20 uppercase tracking-widest">Oracle Engine v1.0</span>
+                <span className="text-[9px] opacity-20 uppercase tracking-widest">AI Engine v1.0</span>
               </div>
             </motion.div>
           </div>

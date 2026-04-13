@@ -105,7 +105,7 @@ export function StatusHologram({ health, metrics, onDeepDive }: StatusHologramPr
                   }}
                   className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
                 >
-                  Open Oracle Deep-Dive <Zap size={12} className="text-[#F27D26]" />
+                  Open Stress Test Deep-Dive <Zap size={12} className="text-[#F27D26]" />
                 </button>
               </div>
             </motion.div>
