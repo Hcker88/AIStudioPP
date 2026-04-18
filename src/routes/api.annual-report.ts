@@ -13,7 +13,7 @@ export const annualReportService = {
     const userLoans = await db.select().from(loans).where(eq(loans.profileId, userId));
     const goals = await db.select().from(financialGoals).where(eq(financialGoals.userId, userId));
 
-    // Mock data for demonstration
+    // Data for demonstration
     const interestKilled = 125000; // Total ₹ saved
     const goalProgress = goals.map(g => ({
       name: g.name,

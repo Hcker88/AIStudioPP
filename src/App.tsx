@@ -38,30 +38,15 @@ import {
 } from 'lucide-react';
 import { StatCard } from './components/ui/StatCard';
 import { LoanRow } from './components/ui/LoanRow';
-import { StaleDataWarning } from './components/ui/StaleDataWarning';
 import { AdvisoryChat } from './components/chat/AdvisoryChat';
-import { StrategyVisualizer } from './components/dashboard/StrategyVisualizer';
-import { ScenarioMatrix } from './components/dashboard/ScenarioMatrix';
-import { CommunityPulse } from './components/dashboard/CommunityPulse';
-import { InterestSavedChart } from './components/dashboard/InterestSavedChart';
-import { GlobalSearch } from './components/ui/GlobalSearch';
 import { StrategyProvider, useStrategy } from './contexts/StrategyContext';
-import { monteCarloSimulator } from './lib/monteCarlo';
-import { LIFE_EVENT_TEMPLATES, lifeEventSimulator } from './lib/lifeEvents';
 import { formatINR } from './lib/formatters';
 import { cn } from './lib/utils';
-import { systemAudit } from './lib/systemAudit';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { DashboardSkeleton } from './components/ui/Skeleton';
-import { Leaderboard } from './components/marketing/Leaderboard';
+
 import { SecurityPage } from './routes/security';
-import { StatusHologram } from './components/ui/StatusHologram';
 import { ConversationForm } from './components/onboarding/ConversationForm';
-import { SmartActions } from './components/dashboard/SmartActions';
-import { YearInReview } from './components/dashboard/YearInReview';
-import { FreedomClock } from './components/dashboard/FreedomClock';
-import { conciergeLogic } from './lib/ai/concierge';
-import { StressTestEngine } from './components/dashboard/StressTestEngine';
 
 function DashboardContent() {
   const [step, setStep] = useState(0); // 0: Landing, 1: Interrogation, 2: Dashboard
@@ -69,10 +54,6 @@ function DashboardContent() {
   const [onboardingData, setOnboardingData] = useState<any>(null);
   const [hookDebt, setHookDebt] = useState<number>(1000000);
   const [hookRate, setHookRate] = useState<number>(12);
-  const [activeTab, setActiveTab] = useState<'STRATEGY' | 'GOALS' | 'HOUSEHOLD' | 'ORACLE'>('STRATEGY');
-  const [isStale, setIsStale] = useState(false);
-  const [isOverBudget, setIsOverBudget] = useState(true); // Mocking over-budget state
-  const [confidenceScore, setConfidenceScore] = useState(88);
   const [showConfetti, setShowConfetti] = useState(false);
   const { extraMonthly, setLastSyncMessage, isPrivacyMode, setIsPrivacyMode, highlightedCard, setFinancialData } = useStrategy();
   
@@ -80,33 +61,39 @@ function DashboardContent() {
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(true); // Start with loading for skeleton
   const [user, setUser] = useState<any>(null);
-  const [auditWarning, setAuditWarning] = useState<string | null>(null);
-  const [freedomSeconds] = useState(298456320); // Static initial value
-  const [netWorthVelocity, setNetWorthVelocity] = useState(12.4); // Mock velocity
-  const [showMilestone, setShowMilestone] = useState(false);
-  const [isConciergeEnabled, setIsConciergeEnabled] = useState(false);
-  const [showYearInReview, setShowYearInReview] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [conciergeMessage, setConciergeMessage] = useState<string | null>(null);
-  const [lastActivity, setLastActivity] = useState(Date.now());
 
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  const fetchUser = async () => {
+  const fetchUser = async (retryCount = 0) => {
     try {
-      console.log("Fetching user...");
+      console.log("Fetching user..., attempt:", retryCount + 1);
       const response = await fetch('/api/auth/me?t=' + Date.now(), {
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
         }
       });
+      
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        if (text.includes("Starting Server") && retryCount < 3) {
+          console.log("Server is starting, retrying fetchUser in 2 seconds...");
+          setTimeout(() => fetchUser(retryCount + 1), 2000);
+          return;
+        }
+        throw new Error(`Server returned an invalid response (not JSON). Status: ${response.status}`);
+      }
+
       const data = await response.json();
       console.log("User data received:", data);
       
-      if (data.user) {
-        setUser(data.user);
-        localStorage.setItem('debt_strategist_user', JSON.stringify(data.user));
+      const user = data.data?.user || data.user;
+      
+      if (user) {
+        setUser(user);
+        localStorage.setItem('debt_strategist_user', JSON.stringify(user));
         // Do not skip to step 2, let them click "Begin Interrogation"
       } else {
         console.log("No user found in session. Checking localStorage...");
@@ -134,8 +121,8 @@ function DashboardContent() {
     }
   };
 
-  const handleLogin = async () => {
-    console.log("handleLogin triggered");
+  const handleLogin = async (retryCount = 0) => {
+    console.log("handleLogin triggered, attempt:", retryCount + 1);
     setLoginError(null);
     try {
       const response = await fetch('/api/auth/url?t=' + Date.now(), {
@@ -144,16 +131,35 @@ function DashboardContent() {
           'Pragma': 'no-cache'
         }
       });
+      
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("Received non-JSON response:", text.substring(0, 200));
+        
+        if (text.includes("Starting Server") && retryCount < 3) {
+          console.log("Server is starting, retrying in 2 seconds...");
+          setLoginError("Server is waking up, retrying...");
+          setTimeout(() => handleLogin(retryCount + 1), 2000);
+          return;
+        }
+        
+        throw new Error(`Server returned an invalid response (not JSON). Status: ${response.status}`);
+      }
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `Auth URL fetch failed with status: ${response.status}`);
       }
+      
       const data = await response.json();
-      if (!data.url) {
-        throw new Error("No URL returned from server");
+      console.log("Auth URL response:", data);
+      const url = data.data?.url || data.url;
+      if (!url) {
+        throw new Error(`No URL returned from server. Response: ${JSON.stringify(data)}`);
       }
-      console.log("Opening auth window with URL:", data.url);
-      const authWindow = window.open(data.url, 'oauth_popup', 'width=600,height=700');
+      console.log("Opening auth window with URL:", url);
+      const authWindow = window.open(url, 'oauth_popup', 'width=600,height=700');
       if (!authWindow) {
         setLoginError('Please allow popups for this site to connect your account.');
       }
@@ -196,30 +202,13 @@ function DashboardContent() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  // Mock data for demonstration (Indian context)
-  const [loans, setLoans] = useState([
-    { name: 'HDFC Home Loan', principal: 4500000, interestRate: 8.5, emi: 38000, tenure: 240 },
-    { name: 'ICICI Personal Loan', principal: 500000, interestRate: 14.5, emi: 12000, tenure: 60 },
-  ]);
-
-  const [income, setIncome] = useState(150000);
-  const [expenses, setExpenses] = useState(45000);
+  const [loans, setLoans] = useState<any[]>([]);
+  const [income, setIncome] = useState(0);
+  const [expenses, setExpenses] = useState(0);
 
   useEffect(() => {
     const totalDebt = loans.reduce((acc, l) => acc + l.principal, 0);
     setFinancialData({ totalDebt, monthlyIncome: income, expenses });
-
-    // Run Audit
-    const auditResult = systemAudit.checkInconsistencies(
-      loans.map(l => ({ name: l.name, principal: l.principal })),
-      expenses,
-      income
-    );
-    if (!auditResult.isValid) {
-      setAuditWarning(systemAudit.getAIPrompt(auditResult, "Harshit"));
-    } else {
-      setAuditWarning(null);
-    }
   }, [loans, income, expenses, setFinancialData]);
 
   useEffect(() => {
@@ -228,34 +217,9 @@ function DashboardContent() {
     return () => clearTimeout(timer);
   }, []);
 
-  // AI Concierge Idle Detection
-  useEffect(() => {
-    if (!isConciergeEnabled || step !== 2) return;
 
-    const interval = setInterval(() => {
-      const idleTime = Date.now() - lastActivity;
-      if (idleTime > 10000 && !conciergeMessage) {
-        const message = conciergeLogic.getMessage(activeTab);
-        setConciergeMessage(message);
-      }
-    }, 1000);
 
-    return () => clearInterval(interval);
-  }, [isConciergeEnabled, lastActivity, activeTab, conciergeMessage, step]);
 
-  // Reset idle timer on interaction
-  useEffect(() => {
-    const handleInteraction = () => {
-      setLastActivity(Date.now());
-      if (conciergeMessage) setConciergeMessage(null);
-    };
-    window.addEventListener('mousemove', handleInteraction);
-    window.addEventListener('keydown', handleInteraction);
-    return () => {
-      window.removeEventListener('mousemove', handleInteraction);
-      window.removeEventListener('keydown', handleInteraction);
-    };
-  }, [conciergeMessage]);
 
   const triggerCelebration = () => {
     const duration = 5 * 1000;
@@ -277,22 +241,9 @@ function DashboardContent() {
     }, 250);
   };
 
-  const [portfolioDrift, setPortfolioDrift] = useState({
-    currentEquity: 78,
-    targetEquity: 70,
-    drift: 8,
-    totalAssets: 1250000
-  });
 
-  const handleSyncAll = async () => {
-    setIsSyncing(true);
-    // Simulate fetching from ICICI, HDFC, Zerodha
-    setTimeout(() => {
-      setIsSyncing(false);
-      alert("Sync Complete: Fetched balances from ICICI (Savings), HDFC (Home Loan), and Zerodha (Equity). Portfolio Drift updated.");
-      setPortfolioDrift(prev => ({ ...prev, currentEquity: 82, drift: 12 }));
-    }, 2000);
-  };
+
+
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -300,7 +251,7 @@ function DashboardContent() {
       const response = await fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'default-user' }),
+        body: JSON.stringify({ userId: user?.id || 'default-user' }),
       });
       const data = await response.json();
       setLastSyncMessage(data.message);
@@ -318,7 +269,7 @@ function DashboardContent() {
       const response = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'default-user' }),
+        body: JSON.stringify({ userId: user?.id || 'default-user' }),
       });
       const data = await response.json();
       if (data.success) {
@@ -369,7 +320,7 @@ function DashboardContent() {
 
           <div className="flex flex-col items-center gap-6">
             <button 
-              onClick={handleLogin}
+              onClick={() => handleLogin()}
               className="group relative px-12 py-6 bg-white text-black font-bold text-lg rounded-sm hover:scale-105 transition-all flex items-center gap-3"
             >
               <ShieldCheck className="text-[#F27D26]" />
@@ -470,25 +421,12 @@ function DashboardContent() {
               {isExporting ? 'Exporting...' : 'Export Roadmap'}
             </button>
 
-            <button 
-              onClick={handleSyncAll}
-              disabled={isSyncing}
-              className="px-4 py-2 bg-[#F27D26]/10 border border-[#F27D26] rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-[#F27D26]/20 transition-colors disabled:opacity-50"
-            >
-              <Zap className={cn("w-3 h-3 text-[#F27D26]", isSyncing && "animate-spin")} />
-              {isSyncing ? 'Syncing All...' : 'Sync All (Open Finance)'}
-            </button>
+
             <div className="px-4 py-2 bg-white/5 border border-white/10 rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
               Live Market Data
             </div>
-            <button 
-              onClick={() => setView('LEADERBOARD')}
-              className="px-4 py-2 bg-white/5 border border-white/10 rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-white/10 transition-colors"
-            >
-              <Trophy size={14} className="text-[#F27D26]" />
-              Leaderboard
-            </button>
+
             <button 
               onClick={() => setView('SECURITY')}
               className="px-4 py-2 bg-white/5 border border-white/10 rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-white/10 transition-colors"
@@ -497,13 +435,7 @@ function DashboardContent() {
               Security
             </button>
 
-            <button 
-              onClick={() => setShowYearInReview(true)}
-              className="px-4 py-2 bg-[#F27D26]/10 border border-[#F27D26] rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-[#F27D26]/20 transition-all"
-            >
-              <Sparkles size={14} className="text-[#F27D26]" />
-              Year in Review
-            </button>
+
 
             {deferredPrompt && (
               <button 
@@ -549,14 +481,7 @@ function DashboardContent() {
               </motion.div>
             )}
 
-            {view === 'LEADERBOARD' && (
-              <motion.div key="leaderboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="max-w-2xl mx-auto">
-                <button onClick={() => setView('APP')} className="mb-8 text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:text-[#F27D26]">
-                  <ArrowRight className="rotate-180" size={14} /> Back to App
-                </button>
-                <Leaderboard />
-              </motion.div>
-            )}
+
 
             {view === 'APP' && (
               <>
@@ -674,12 +599,6 @@ function DashboardContent() {
                     const equityAssets = data.assets.filter((a: any) => a.type === 'EQUITY').reduce((acc: number, a: any) => acc + a.amount, 0);
                     const currentEquity = totalAssets > 0 ? Math.round((equityAssets / totalAssets) * 100) : 0;
                     const targetEquity = 70; // Default target
-                    setPortfolioDrift({
-                      currentEquity,
-                      targetEquity,
-                      drift: currentEquity - targetEquity,
-                      totalAssets
-                    });
                   }
 
                   setStep(2);
@@ -694,16 +613,7 @@ function DashboardContent() {
                 animate={{ opacity: 1 }}
                 className="grid grid-cols-12 gap-8"
               >
-                {auditWarning && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="col-span-12 p-4 bg-red-500/10 border border-red-500/20 rounded-sm flex items-center gap-3 text-red-500"
-                  >
-                    <ShieldAlert size={18} />
-                    <p className="text-xs font-bold uppercase tracking-widest">{auditWarning}</p>
-                  </motion.div>
-                )}
+
                 {isLoading ? (
                   <div className="col-span-12">
                     <DashboardSkeleton />
@@ -712,494 +622,45 @@ function DashboardContent() {
                   <>
                     {/* Left Column: Command Center */}
                     <div className="col-span-12 lg:col-span-8 space-y-12">
-                      {/* Intent-Based Header: Status Hologram */}
-                      <StatusHologram 
-                        health={netWorthVelocity > 10 ? 'GREEN' : 'YELLOW'}
-                        metrics={{
-                          interestSaved: 4500,
-                          burnRate: 40,
-                          wealthVelocity: netWorthVelocity
-                        }}
-                        onDeepDive={() => setActiveTab('ORACLE')}
-                      />
 
-                      {/* AI Concierge Toast */}
-                      <AnimatePresence>
-                        {conciergeMessage && (
-                          <motion.div 
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 20 }}
-                            className="bg-purple-500/10 border border-purple-500/20 p-4 rounded-sm flex items-center gap-4 text-purple-300"
-                          >
-                            <Sparkles className="text-purple-500 shrink-0" size={18} />
-                            <p className="text-xs font-medium">{conciergeMessage}</p>
-                            <button 
-                              onClick={() => setConciergeMessage(null)}
-                              className="ml-auto text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100"
-                            >
-                              Dismiss
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-
-                      {/* Tabs Navigation */}
-                      <div className="flex gap-8 border-b border-white/10 pb-4">
-                        <button 
-                          onClick={() => setActiveTab('STRATEGY')}
-                          className={cn(
-                            "text-[10px] font-bold uppercase tracking-[0.2em] transition-all relative pb-4",
-                            activeTab === 'STRATEGY' ? "text-[#F27D26]" : "opacity-40 hover:opacity-100"
-                          )}
-                        >
-                          Current Strategy
-                          {activeTab === 'STRATEGY' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F27D26]" />}
-                        </button>
-                        <button 
-                          onClick={() => setActiveTab('GOALS')}
-                          className={cn(
-                            "text-[10px] font-bold uppercase tracking-[0.2em] transition-all relative pb-4",
-                            activeTab === 'GOALS' ? "text-[#F27D26]" : "opacity-40 hover:opacity-100"
-                          )}
-                        >
-                          Long-Term Goals
-                          {activeTab === 'GOALS' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F27D26]" />}
-                        </button>
-                        <button 
-                          onClick={() => setActiveTab('HOUSEHOLD')}
-                          className={cn(
-                            "text-[10px] font-bold uppercase tracking-[0.2em] transition-all relative pb-4",
-                            activeTab === 'HOUSEHOLD' ? "text-[#F27D26]" : "opacity-40 hover:opacity-100"
-                          )}
-                        >
-                          Family View
-                          {activeTab === 'HOUSEHOLD' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F27D26]" />}
-                        </button>
-                        <button 
-                          onClick={() => setActiveTab('ORACLE')}
-                          className={cn(
-                            "text-[10px] font-bold uppercase tracking-[0.2em] transition-all relative pb-4 flex items-center gap-2",
-                            activeTab === 'ORACLE' ? "text-[#F27D26]" : "opacity-40 hover:opacity-100"
-                          )}
-                        >
-                          <Sparkles size={10} /> Stress Test
-                          {activeTab === 'ORACLE' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#F27D26]" />}
-                        </button>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <StatCard label="Monthly Income" value={formatINR(income, true, isPrivacyMode)} isPrivacyMode={isPrivacyMode} />
+                        <StatCard label="Total Debt" value={formatINR(loans.reduce((acc, l) => acc + l.principal, 0), true, isPrivacyMode)} isPrivacyMode={isPrivacyMode} />
+                        <StatCard label="Monthly EMI" value={formatINR(loans.reduce((acc, l) => acc + l.emi, 0), true, isPrivacyMode)} isPrivacyMode={isPrivacyMode} />
                       </div>
 
-                      <AnimatePresence mode="wait">
-                        {activeTab === 'STRATEGY' ? (
-                          <motion.div 
-                            key="strategy"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="space-y-12"
-                          >
-                            {/* One-Tap Action Cards */}
-                            <SmartActions />
-
-                            {/* Portfolio Drift Monitor */}
-                            <div className="bg-white/5 border border-white/10 rounded-sm p-6">
-                              <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                                  <RefreshCw size={14} className="text-[#F27D26]" /> Portfolio Drift Monitor
-                                </h3>
-                                <span className={cn(
-                                  "text-[10px] font-bold px-2 py-1 rounded-sm",
-                                  portfolioDrift.drift > 10 ? "bg-red-500/10 text-red-500" : "bg-green-500/10 text-green-500"
-                                )}>
-                                  {portfolioDrift.drift > 10 ? 'CRITICAL DRIFT' : 'HEALTHY'}
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                                <div>
-                                  <p className="text-[10px] opacity-40 uppercase tracking-widest mb-1">Current Equity</p>
-                                  <p className="text-2xl font-bold">{portfolioDrift.currentEquity}%</p>
-                                  <div className="w-full h-1 bg-white/10 rounded-full mt-2">
-                                    <div className="h-full bg-[#F27D26]" style={{ width: `${portfolioDrift.currentEquity}%` }} />
-                                  </div>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] opacity-40 uppercase tracking-widest mb-1">Target Strategy</p>
-                                  <p className="text-2xl font-bold">{portfolioDrift.targetEquity}%</p>
-                                  <div className="w-full h-1 bg-white/10 rounded-full mt-2">
-                                    <div className="h-full bg-white/40" style={{ width: `${portfolioDrift.targetEquity}%` }} />
-                                  </div>
-                                </div>
-                                <div className="flex flex-col justify-center">
-                                  <p className="text-[10px] opacity-40 uppercase tracking-widest mb-1">Drift Detected</p>
-                                  <p className={cn("text-2xl font-bold", portfolioDrift.drift > 10 ? "text-red-500" : "text-[#F27D26]")}>
-                                    {portfolioDrift.drift > 0 ? '+' : ''}{portfolioDrift.drift}%
-                                  </p>
-                                </div>
-                              </div>
-                              {portfolioDrift.drift > 10 && (
-                                <div className="mt-6 p-4 bg-red-500/5 border border-red-500/20 rounded-sm flex items-start gap-4">
-                                  <ShieldAlert className="text-red-500 shrink-0" size={16} />
-                                  <p className="text-[11px] opacity-80 leading-relaxed">
-                                    <span className="font-bold text-red-500 uppercase">Profit Booking Nudge:</span> Nifty is at an all-time high. Your strategy suggests moving ₹{(portfolioDrift.drift / 100 * portfolioDrift.totalAssets).toLocaleString('en-IN')} from Equity to your Home Loan to 'lock in' gains and save ₹{(portfolioDrift.drift / 100 * portfolioDrift.totalAssets * 0.085 * 5).toLocaleString('en-IN')} in future interest.
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Middle: The Future (Strategy Visualizer) */}
-                            <StrategyVisualizer 
-                              income={income} 
-                              expenses={expenses} 
-                              loans={loans} 
-                              recommendedRoi={12} 
-                            />
-
-                            {/* Interest Saved Chart */}
-                            <InterestSavedChart 
-                              data={[
-                                { month: 'Jan', saved: 5000 },
-                                { month: 'Feb', saved: 12000 },
-                                { month: 'Mar', saved: 25000 },
-                                { month: 'Apr', saved: 42000 },
-                                { month: 'May', saved: 68000 },
-                                { month: 'Jun', saved: 95000 },
-                              ]}
-                            />
-
-                            {/* Scenario Matrix */}
-                            <ScenarioMatrix 
-                              income={income} 
-                              expenses={expenses} 
-                              loans={loans} 
-                              extraMonthly={extraMonthly} 
-                              investmentRoi={12} 
-                            />
-
-                            {/* Bottom: Breakdown */}
-                            <div className="bg-white/5 border border-white/10 rounded-sm">
-                              <div className="p-6 border-b border-white/10 flex justify-between items-center">
-                                <h3 className="text-xs font-bold uppercase tracking-widest">Liability Breakdown</h3>
-                                <button className="text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity">Edit All</button>
-                              </div>
-                              <div className="divide-y divide-white/5">
-                                {loans.map((loan, i) => (
-                                  <LoanRow 
-                                    key={i}
-                                    name={loan.name} 
-                                    apr={loan.interestRate} 
-                                    emi={loan.emi} 
-                                    priority={loan.interestRate > 12 ? "HIGH" : "MEDIUM"} 
-                                    isPrivacyMode={isPrivacyMode}
-                                    highlight={highlightedCard === loan.name}
-                                    onClose={() => {
-                                      triggerCelebration();
-                                      setShowConfetti(true);
-                                      setTimeout(() => setShowConfetti(false), 5000);
-                                    }}
-                                  />
-                                ))}
-                              </div>
-                            </div>
-                          </motion.div>
-                        ) : activeTab === 'GOALS' ? (
-                          <motion.div 
-                            key="goals"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="space-y-8"
-                          >
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                              <div className="bg-white/5 p-8 border border-white/10 rounded-sm space-y-6">
-                                <div className="flex items-center gap-3 mb-4">
-                                  <Target className="text-[#F27D26]" />
-                                  <h3 className="text-sm font-bold uppercase tracking-widest">Active Goals</h3>
-                                </div>
-                                <div className="space-y-6">
-                                  <div className="border-l-2 border-[#F27D26] pl-6 py-2">
-                                    <div className="flex justify-between items-start mb-2">
-                                      <div>
-                                        <h4 className="font-bold">Daughter's Education</h4>
-                                        <p className="text-[10px] opacity-40 uppercase tracking-widest">Target: ₹25,00,000 by 2032</p>
-                                      </div>
-                                      <span className="text-[10px] font-bold text-[#F27D26] bg-[#F27D26]/10 px-2 py-1 rounded-sm">HIGH PRIORITY</span>
-                                    </div>
-                                    <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden mt-4">
-                                      <div className="h-full bg-[#F27D26] w-[15%]" />
-                                    </div>
-                                    <p className="text-[10px] mt-2 opacity-60">₹3,75,000 saved (15%)</p>
-                                  </div>
-
-                                  <div className="border-l-2 border-white/20 pl-6 py-2">
-                                    <div className="flex justify-between items-start mb-2">
-                                      <div>
-                                        <h4 className="font-bold">Retirement Corpus</h4>
-                                        <p className="text-[10px] opacity-40 uppercase tracking-widest">Target: ₹5,00,00,000 by 2050</p>
-                                      </div>
-                                      <span className="text-[10px] font-bold text-white/40 bg-white/5 px-2 py-1 rounded-sm">MEDIUM PRIORITY</span>
-                                    </div>
-                                    <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden mt-4">
-                                      <div className="h-full bg-white/40 w-[2%]" />
-                                    </div>
-                                    <p className="text-[10px] mt-2 opacity-60">₹10,00,000 saved (2%)</p>
-                                  </div>
-                                </div>
-                                <button className="w-full border border-dashed border-white/20 py-4 hover:border-[#F27D26] hover:text-[#F27D26] transition-all flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-widest">
-                                  <Plus size={12} /> Add New Goal
-                                </button>
-                              </div>
-
-                              <div className="bg-white/5 p-8 border border-white/10 rounded-sm space-y-6">
-                                <div className="flex items-center gap-3 mb-4">
-                                  <CalendarDays className="text-[#F27D26]" />
-                                  <h3 className="text-sm font-bold uppercase tracking-widest">Sinking Funds</h3>
-                                </div>
-                                <div className="space-y-4">
-                                  <div className="flex justify-between items-center p-3 bg-white/5 rounded-sm">
-                                    <div>
-                                      <p className="text-xs font-bold">Annual Insurance</p>
-                                      <p className="text-[9px] opacity-40 uppercase tracking-widest">Due: Sept 2026</p>
-                                    </div>
-                                    <div className="text-right">
-                                      <p className="text-xs font-bold">₹2,500/mo</p>
-                                      <p className="text-[9px] opacity-40 uppercase tracking-widest">Target: ₹30,000</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex justify-between items-center p-3 bg-white/5 rounded-sm">
-                                    <div>
-                                      <p className="text-xs font-bold">Diwali Shopping</p>
-                                      <p className="text-[9px] opacity-40 uppercase tracking-widest">Due: Nov 2026</p>
-                                    </div>
-                                    <div className="text-right">
-                                      <p className="text-xs font-bold">₹1,500/mo</p>
-                                      <p className="text-[9px] opacity-40 uppercase tracking-widest">Target: ₹15,000</p>
-                                    </div>
-                                  </div>
-                                </div>
-                                {isOverBudget && (
-                                  <motion.button 
-                                    whileHover={{ scale: 1.02 }}
-                                    whileTap={{ scale: 0.98 }}
-                                    onClick={() => alert("Self-Healing: Redirecting ₹5,000 from 'Diwali Shopping' to cover your 'Dining' overrun. Debt payoff remains on track.")}
-                                    className="w-full bg-[#F27D26]/10 border border-[#F27D26] text-[#F27D26] py-3 rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2"
-                                  >
-                                    <RefreshCw size={12} /> Heal My Month
-                                  </motion.button>
-                                )}
-                                <p className="text-[10px] opacity-40 italic leading-relaxed">
-                                  Sinking funds are mentally "reserved" from your disposable income to ensure your debt payoff strategy is realistic.
-                                </p>
-                              </div>
-                            </div>
-                          </motion.div>
-                        ) : activeTab === 'HOUSEHOLD' ? (
-                          <motion.div 
-                            key="household"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="space-y-8"
-                          >
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                              <StatCard label="Family Income" value={formatINR(250000, true, isPrivacyMode)} subtext="Aggregate (2 Members)" isPrivacyMode={isPrivacyMode} />
-                              <StatCard label="Family Debt" value={formatINR(6500000, true, isPrivacyMode)} subtext="Aggregate Liabilities" isPrivacyMode={isPrivacyMode} />
-                              <StatCard label="Family Debt-Free" value="AUG 2034" subtext="Optimized Timeline" isPrivacyMode={isPrivacyMode} />
-                            </div>
-                            
-                            <div className="bg-white/5 border border-white/10 rounded-sm p-8">
-                              <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                                  <Lock size={14} className="text-[#F27D26]" /> Digital Legacy Vault
-                                </h3>
-                                <span className="text-[10px] font-bold text-green-500 bg-green-500/10 px-2 py-1 rounded-sm">AES-256 SECURED</span>
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-4">
-                                  <p className="text-xs opacity-60 leading-relaxed">
-                                    Secure your family's future. The Legacy Vault stores encrypted instructions for your nominee, triggered only by your "Dead Man's Switch".
-                                  </p>
-                                  <div className="p-4 bg-white/5 border border-white/10 rounded-sm">
-                                    <div className="flex justify-between items-center mb-2">
-                                      <p className="text-[10px] font-bold uppercase tracking-widest">Dead Man's Switch</p>
-                                      <p className="text-[10px] text-[#F27D26]">30 DAYS</p>
-                                    </div>
-                                    <div className="w-full h-1 bg-white/10 rounded-full">
-                                      <div className="h-full bg-[#F27D26] w-[10%]" />
-                                    </div>
-                                    <p className="text-[9px] mt-2 opacity-40">Last check-in: 3 days ago</p>
-                                  </div>
-                                </div>
-                                <div className="space-y-4">
-                                  <div className="border-l-2 border-white/10 pl-4 py-1">
-                                    <label className="block text-[10px] uppercase tracking-widest opacity-40 mb-1">Nominee Email</label>
-                                    <p className="text-sm font-bold">spouse@example.com</p>
-                                  </div>
-                                  <button className="w-full bg-white/5 border border-white/10 py-3 rounded-sm text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-2">
-                                    <ShieldCheck size={12} /> Manage Vault Instructions
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="bg-white/5 border border-white/10 rounded-sm p-8">
-                              <h3 className="text-xs font-bold uppercase tracking-widest mb-6">Household Members</h3>
-                              <div className="space-y-4">
-                                <div className="flex justify-between items-center p-4 bg-white/5 rounded-sm">
-                                  <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-[#F27D26] flex items-center justify-center text-black font-bold">H</div>
-                                    <div>
-                                      <p className="font-bold">Harshit (Primary)</p>
-                                      <p className="text-[10px] opacity-40 uppercase tracking-widest">Full Access</p>
-                                    </div>
-                                  </div>
-                                  <div className="text-right">
-                                    <p className="text-xs font-bold">₹1,50,000/mo</p>
-                                    <p className="text-[10px] opacity-40 uppercase tracking-widest">Income Share: 60%</p>
-                                  </div>
-                                </div>
-                                <div className="flex justify-between items-center p-4 bg-white/5 rounded-sm">
-                                  <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center font-bold">S</div>
-                                    <div>
-                                      <p className="font-bold">Spouse (Contributor)</p>
-                                      <p className="text-[10px] opacity-40 uppercase tracking-widest">Privacy: Debt Masked</p>
-                                    </div>
-                                  </div>
-                                  <div className="text-right">
-                                    <p className="text-xs font-bold">₹1,00,000/mo</p>
-                                    <p className="text-[10px] opacity-40 uppercase tracking-widest">Income Share: 40%</p>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </motion.div>
-                        ) : (
-                          <motion.div 
-                            key="oracle"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="space-y-8"
-                          >
-                            <StressTestEngine />
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                              <div className="bg-white/5 border border-white/10 p-6 rounded-sm flex flex-col items-center justify-center text-center">
-                                <p className="text-[10px] opacity-40 uppercase tracking-widest mb-4">Safety Score</p>
-                                <div className="relative w-32 h-32 flex items-center justify-center">
-                                  <svg className="w-full h-full transform -rotate-90">
-                                    <circle cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-white/5" />
-                                    <circle 
-                                      cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="8" fill="transparent" 
-                                      strokeDasharray={364}
-                                      strokeDashoffset={364 - (364 * confidenceScore) / 100}
-                                      className="text-[#F27D26] transition-all duration-1000" 
-                                    />
-                                  </svg>
-                                  <span className="absolute text-2xl font-bold">{confidenceScore}%</span>
-                                </div>
-                                <p className="text-[10px] mt-4 opacity-60">Stress Test Pass Rate</p>
-                              </div>
-                              <StatCard label="Worst-Case Net Worth" value={formatINR(1200000, true, isPrivacyMode)} subtext="Inflation @ 8%" isPrivacyMode={isPrivacyMode} />
-                              <StatCard label="Best-Case Net Worth" value={formatINR(4500000, true, isPrivacyMode)} subtext="Market @ 14%" isPrivacyMode={isPrivacyMode} />
-                            </div>
-
-                            <div className="bg-white/5 border border-white/10 rounded-sm p-8">
-                              <h3 className="text-xs font-bold uppercase tracking-widest mb-6 flex items-center gap-2">
-                                <Flag size={14} className="text-[#F27D26]" /> 
-                                Life-Event Simulator
-                              </h3>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {LIFE_EVENT_TEMPLATES.map((event) => (
-                                  <button 
-                                    key={event.id}
-                                    onClick={() => {
-                                      setConfidenceScore(prev => Math.max(40, prev - 15));
-                                      alert(`Event Dropped: ${event.name}. Your strategy confidence has adjusted.`);
-                                    }}
-                                    className="flex justify-between items-center p-4 bg-white/5 border border-white/10 rounded-sm hover:border-[#F27D26] transition-all text-left"
-                                  >
-                                    <div>
-                                      <p className="text-xs font-bold">{event.name}</p>
-                                      <p className="text-[9px] opacity-40 uppercase tracking-widest mt-1">{event.description}</p>
-                                    </div>
-                                    <Plus size={14} className="opacity-20" />
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-
-                            <div className="bg-[#F27D26]/5 border border-[#F27D26]/20 rounded-sm p-6 flex items-center gap-6">
-                              <div className="w-12 h-12 rounded-full bg-[#F27D26]/20 flex items-center justify-center text-[#F27D26]">
-                                <Shield size={24} />
-                              </div>
-                              <div className="flex-1">
-                                <h4 className="text-sm font-bold uppercase tracking-widest mb-1">Stress Test Insight</h4>
-                                <p className="text-xs opacity-60 leading-relaxed">
-                                  Your plan has a {confidenceScore}% Confidence Level of succeeding even if the Repo Rate stays high. 
-                                  {confidenceScore < 70 && " WARNING: High risk of strategy drift. Consider a 'Hard Pivot' to build liquidity."}
-                                </p>
-                              </div>
-                              {confidenceScore < 70 && (
-                                <button className="px-4 py-2 bg-[#F27D26] text-black text-[10px] font-bold uppercase tracking-widest rounded-sm">
-                                  Hard Pivot
-                                </button>
-                              )}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                      {/* Main Content Area */}
+                      <div className="space-y-12">
+                        {/* Bottom: Breakdown */}
+                        <div className="bg-white/5 border border-white/10 rounded-sm">
+                          <div className="p-6 border-b border-white/10 flex justify-between items-center">
+                            <h3 className="text-xs font-bold uppercase tracking-widest">Liability Breakdown</h3>
+                          </div>
+                          <div className="divide-y divide-white/5">
+                            {loans.map((loan, i) => (
+                              <LoanRow 
+                                key={i}
+                                name={loan.name} 
+                                apr={loan.interestRate} 
+                                emi={loan.emi} 
+                                priority={loan.interestRate > 12 ? "HIGH" : "MEDIUM"} 
+                                isPrivacyMode={isPrivacyMode}
+                                highlight={highlightedCard === loan.name}
+                                onClose={() => {
+                                  triggerCelebration();
+                                  setShowConfetti(true);
+                                  setTimeout(() => setShowConfetti(false), 5000);
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Right Column: The Coach */}
                     <div className="col-span-12 lg:col-span-4 space-y-8 h-[calc(100vh-160px)] sticky top-32">
-                      <CommunityPulse 
-                        percentile={82} 
-                        location="Hyderabad" 
-                        resilienceScore={82} 
-                      />
-                      <AdvisoryChat highestLoanName="ICICI Personal Loan" highestLoanRate={14.5} />
-                      
-                      {/* Top Action Item */}
-                      <motion.div 
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="p-6 bg-[#F27D26] text-black rounded-sm shadow-[0_0_30px_rgba(242,125,38,0.3)] relative overflow-hidden group cursor-pointer"
-                        onClick={() => {
-                          triggerCelebration();
-                          alert("Action Executed: ₹4,200 paid to Amex. You avoided future interest equivalent to 2 days of your salary!");
-                        }}
-                      >
-                        <div className="relative z-10">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Zap size={14} fill="black" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest">Top Action Item</span>
-                          </div>
-                          <h4 className="text-lg font-bold leading-tight mb-2">Pay ₹4,200 extra to Amex today.</h4>
-                          <p className="text-xs font-medium mb-4 opacity-80">This saves enough future interest to equal 2 days of your salary.</p>
-                          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
-                            Execute Now <ArrowUpRight size={12} />
-                          </div>
-                        </div>
-                        <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform">
-                          <TrendingUp size={120} />
-                        </div>
-                      </motion.div>
-
-                      {/* Milestone Card */}
-                      <div className="p-6 bg-white/5 border border-white/10 rounded-sm relative overflow-hidden">
-                        <div className="flex justify-between items-start mb-4">
-                          <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center">
-                            <Trophy size={20} className="text-[#F27D26]" />
-                          </div>
-                          <button className="text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100">Share Card</button>
-                        </div>
-                        <h4 className="text-sm font-bold uppercase tracking-widest mb-1">Net Worth Milestone</h4>
-                        <p className="text-2xl font-bold tracking-tighter mb-4">₹10,00,000 <span className="text-xs opacity-40 font-normal">ACHIEVED</span></p>
-                        <div className="w-full h-1 bg-white/10 rounded-full">
-                          <div className="h-full bg-[#F27D26] w-full" />
-                        </div>
-                        <p className="text-[10px] mt-2 opacity-40 italic">You are in the top 15% of your peer group in Hyderabad.</p>
-                      </div>
+                      <AdvisoryChat user={user} highestLoanName={loans.length > 0 ? loans.reduce((prev, current) => (prev.interestRate > current.interestRate) ? prev : current).name : "No loans"} highestLoanRate={loans.length > 0 ? loans.reduce((prev, current) => (prev.interestRate > current.interestRate) ? prev : current).interestRate : 0} />
                     </div>
                   </>
                 )}
@@ -1264,11 +725,7 @@ function DashboardContent() {
           </motion.div>
         )}
       </AnimatePresence>
-      <AnimatePresence>
-        {showYearInReview && (
-          <YearInReview userId="default-user" onClose={() => setShowYearInReview(false)} />
-        )}
-      </AnimatePresence>
+
     </div>
   );
 }

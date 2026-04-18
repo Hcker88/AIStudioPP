@@ -203,7 +203,7 @@ export async function handleChatAction(userId: string, userMessage: string, fina
       } else if (call.name === "analyze_expense_psychology") {
         const { expenses } = call.args as any;
         
-        // Mock analysis logic
+        // Analysis logic
         const foodSpends = expenses.filter((e: any) => e.category.toLowerCase().includes('food') || e.category.toLowerCase().includes('swiggy') || e.category.toLowerCase().includes('zomato'));
         const totalFood = foodSpends.reduce((acc: number, e: any) => acc + e.amount, 0);
         

@@ -77,7 +77,6 @@ export function ConversationForm({ onComplete }: ConversationFormProps) {
         expenses: Number(expenses),
         assets: assets.map(a => ({ ...a, amount: Number(a.amount) })),
         loans: loans.map(l => ({ ...l, principal: Number(l.principal), emi: Number(l.emi), rate: Number(l.rate) })),
-        // For backwards compatibility with App.tsx mock data
         loanType: loans.length > 0 ? loans[0].name : 'None',
         emi: loans.length > 0 ? Number(loans[0].emi) : 0,
         rate: loans.length > 0 ? Number(loans[0].rate) : 0

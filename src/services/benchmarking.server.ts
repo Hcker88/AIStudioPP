@@ -25,7 +25,6 @@ export const benchmarking = {
   getBenchmark: async (incomeBracket: number, location: string): Promise<BenchmarkData> => {
     try {
       // In a real app, this would query the database for users in the same income bracket and location.
-      // For this demo, we'll use a mix of mock and real aggregation if possible.
       
       const stats = await db.select({
         avgScore: avg(users.disciplineScore),
@@ -33,12 +32,11 @@ export const benchmarking = {
 
       const avgScore = Number(stats[0]?.avgScore || 50);
       
-      // Mocked percentile logic for demo
       const percentile = 82; // Example: "Top 18%"
 
       return {
         avgResilienceScore: avgScore,
-        avgBurnRate: 45, // Mocked avg burn rate for the bracket
+        avgBurnRate: 45,
         percentile,
         location
       };

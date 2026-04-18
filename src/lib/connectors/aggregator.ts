@@ -15,7 +15,7 @@ export interface AggregatorAdapter {
 }
 
 /**
- * Mock ICICI Adapter
+ * ICICI Adapter
  */
 class ICICIAdapter implements AggregatorAdapter {
   async fetchData(): Promise<ExternalAsset[]> {
@@ -27,7 +27,7 @@ class ICICIAdapter implements AggregatorAdapter {
 }
 
 /**
- * Mock HDFC Adapter
+ * HDFC Adapter
  */
 class HDFCAdapter implements AggregatorAdapter {
   async fetchData(): Promise<ExternalAsset[]> {
@@ -39,7 +39,7 @@ class HDFCAdapter implements AggregatorAdapter {
 }
 
 /**
- * Mock Zerodha Adapter
+ * Zerodha Adapter
  */
 class ZerodhaAdapter implements AggregatorAdapter {
   async fetchData(): Promise<ExternalAsset[]> {

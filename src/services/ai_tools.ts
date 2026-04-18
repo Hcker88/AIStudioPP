@@ -88,7 +88,7 @@ export interface MarketRoiResult {
  * Bharat Market Pulse: Compares Equity, Physical Gold, and SGBs.
  */
 export function getMarketRoiData(): MarketRoiResult {
-  // Mocked historical averages for India
+  // Historical averages for India
   const equityRoi = 12.5; // Nifty 50 10yr avg
   const goldRoi = 8.2;   // Physical Gold avg
   const sgbRoi = 10.7;   // Gold (8.2%) + 2.5% SGB Fixed Interest

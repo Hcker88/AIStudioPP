@@ -55,7 +55,7 @@ export function SecurityPage() {
               <Lock className="w-5 h-5 text-[#F27D26]" />
               <h3 className="text-xs font-bold uppercase tracking-widest">Local Masking</h3>
               <p className="text-[11px] opacity-40 leading-relaxed uppercase tracking-tighter">
-                PII (Personally Identifiable Information) is replaced with tokens like USER_ALPHA and ACCOUNT_01.
+                PII (Personally Identifiable Information) is replaced with secure, generic tokens before processing.
               </p>
             </div>
             <div className="p-6 bg-white/5 border border-white/10 rounded-sm space-y-4">

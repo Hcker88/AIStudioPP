@@ -4,14 +4,13 @@ import App from './App.tsx';
 import './index.css';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
-// Register Service Worker
+// Unregister any existing service workers to fix caching issues
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/src/service-worker.ts').then(registration => {
-      console.log('SW registered: ', registration);
-    }).catch(registrationError => {
-      console.log('SW registration failed: ', registrationError);
-    });
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const registration of registrations) {
+      registration.unregister();
+      console.log('Unregistered old service worker');
+    }
   });
 }
 

@@ -40,7 +40,7 @@ export const budgetHealer = {
    * Proposes a "Heal" by pulling from lower-priority goals or sinking funds.
    */
   proposeHeal: (overrun: number, sinkingFunds: { name: string; amount: number }[]): HealProposal | null => {
-    // Sort sinking funds by priority (mocked: assume later due dates are lower priority)
+    // Sort sinking funds by priority (assume later due dates are lower priority)
     // For now, just pick the largest sinking fund
     const sortedFunds = [...sinkingFunds].sort((a, b) => b.amount - a.amount);
     

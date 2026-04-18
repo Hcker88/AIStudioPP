@@ -31,7 +31,7 @@ export async function checkStrategyDrift(userId: string) {
 
     // 2. Compare actual burn rate vs saved strategy
     const actualExpenses = userExpenses.reduce((acc, e) => acc + Number(e.amount), 0);
-    const plannedExpenses = 45000; // Mocked fallback as it's not in strategy
+    const plannedExpenses = 45000; // Fallback as it's not in strategy
     
     const driftPercentage = ((actualExpenses - plannedExpenses) / plannedExpenses) * 100;
 

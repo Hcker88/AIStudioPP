@@ -4,8 +4,6 @@ import { MessageSquare, Send, Sparkles, ArrowRight, ShieldCheck, Bookmark, Shopp
 import { cn } from '@/src/lib/utils';
 import { useStrategy } from '../../contexts/StrategyContext';
 import { formatINR } from '../../lib/formatters';
-import { ImpulseGuard } from './ImpulseGuard';
-import { FeedbackPulse } from '../ui/FeedbackPulse';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -15,14 +13,14 @@ interface Message {
 interface AdvisoryChatProps {
   highestLoanName?: string;
   highestLoanRate?: number;
+  user?: any;
 }
 
-export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99 }: AdvisoryChatProps) {
+export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99, user }: AdvisoryChatProps) {
   const { extraMonthly, lastSyncMessage, setHighlightedCard, financialData } = useStrategy();
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: `I've analyzed your profile. Your ${highestLoanName} at ${highestLoanRate}% is the primary target. How can I help you optimize your ROI today?` }
   ]);
-  const [showImpulseGuard, setShowImpulseGuard] = useState(false);
 
   // Acknowledge context changes
   useEffect(() => {
@@ -64,7 +62,7 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          userId: 'default-user', // In a real app, this would be the actual user ID
+          userId: user?.id || 'default-user',
           message: text,
           financialData
         }),
@@ -95,31 +93,7 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
     }
   };
 
-  const handleSaveStrategy = async (content: string) => {
-    try {
-      // Extract data from content (heuristic)
-      const roiMatch = content.match(/(\d+\.?\d*)%\sMarket/);
-      const debtMatch = content.match(/(\d+\.?\d*)%\sDebt/);
-      
-      const response = await fetch('/api/save-strategy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: 'default-user',
-          name: `Strategy: ${highestLoanName} vs Market`,
-          debtInterestRate: debtMatch ? parseFloat(debtMatch[1]) : highestLoanRate,
-          projectedRoi: roiMatch ? parseFloat(roiMatch[1]) : 10,
-          extraMonthlyPayment: 500, // Default or from context
-        }),
-      });
 
-      if (response.ok) {
-        alert('Strategy saved to your profile.');
-      }
-    } catch (error) {
-      console.error('Save error:', error);
-    }
-  };
 
   const suggestions = [
     `Should I invest ₹10k in Nifty 50 or pay my ${highestLoanName}?`,
@@ -127,39 +101,8 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
     "Explain the 'guaranteed return' of debt payoff."
   ];
 
-  const handleImpulseNudge = (nudge: string) => {
-    setMessages(prev => [...prev, { role: 'assistant', content: nudge }]);
-    setShowImpulseGuard(false);
-  };
-
   return (
     <div className="flex flex-col h-full bg-white/5 border border-white/10 rounded-sm overflow-hidden backdrop-blur-md relative">
-      {/* Impulse Guard Overlay */}
-      <AnimatePresence>
-        {showImpulseGuard && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="absolute inset-0 z-50 bg-black/90 p-4 overflow-y-auto"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <div className="flex items-center gap-2">
-                <ShoppingCart className="w-4 h-4 text-[#F27D26]" />
-                <span className="text-xs font-bold uppercase tracking-widest">Impulse Guard</span>
-              </div>
-              <button onClick={() => setShowImpulseGuard(false)} className="p-1 hover:bg-white/10 rounded-full">
-                <X size={16} />
-              </button>
-            </div>
-            <ImpulseGuard 
-              onNudge={handleImpulseNudge} 
-              onClose={() => setShowImpulseGuard(false)} 
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Header */}
       <div className="p-4 border-b border-white/10 flex items-center justify-between bg-black/20">
         <div className="flex items-center gap-2">
@@ -167,13 +110,6 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
           <span className="text-xs font-bold uppercase tracking-widest">AI Advisory Mode</span>
         </div>
         <div className="flex items-center gap-2">
-          <button 
-            onClick={() => setShowImpulseGuard(true)}
-            className="p-1.5 bg-white/5 border border-white/10 rounded-sm hover:bg-white/10 transition-colors group"
-            title="Impulse Guard"
-          >
-            <ShoppingCart size={14} className="group-hover:text-[#F27D26]" />
-          </button>
           <div className="flex items-center gap-2 px-2 py-1 bg-[#F27D26]/10 border border-[#F27D26]/20 rounded-full">
             <ShieldCheck className="w-3 h-3 text-[#F27D26]" />
             <span className="text-[9px] font-bold text-[#F27D26] uppercase tracking-tighter">Focus: {highestLoanName} @ {highestLoanRate}%</span>
@@ -202,22 +138,7 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
                 </p>
               ))}
               
-              {msg.role === 'assistant' && i > 0 && (
-                <button 
-                  onClick={() => handleSaveStrategy(msg.content)}
-                  className="mt-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#F27D26] hover:opacity-80 transition-opacity"
-                >
-                  <Bookmark size={12} /> Save This Strategy
-                </button>
-              )}
 
-              {msg.role === 'assistant' && i > 0 && (
-                <FeedbackPulse 
-                  userId="default-user" 
-                  aiResponse={msg.content} 
-                  context={JSON.stringify(financialData)} 
-                />
-              )}
             </motion.div>
           ))}
           {isTyping && (
