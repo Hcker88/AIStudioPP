@@ -9,7 +9,7 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   SESSION_SECRET: z.string().min(32),
   GEMINI_API_KEY: z.string().min(1),
-  PORT: z.string(),
+  PORT: z.string().default('3000'),
   NODE_ENV: z.enum(['development', 'production']).default('development'),
   APP_URL: z.string().url().optional(),
 });

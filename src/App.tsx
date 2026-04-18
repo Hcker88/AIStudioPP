@@ -184,6 +184,11 @@ function DashboardContent() {
     fetchUser();
 
     const handleMessage = (event: MessageEvent) => {
+      // Security: Always check origin
+      if (event.origin !== window.location.origin) {
+        return;
+      }
+      
       console.log("Received message:", event.data);
       if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
         console.log("OAuth success message received, fetching user...");
@@ -358,7 +363,6 @@ function DashboardContent() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#E4E3E0] font-sans selection:bg-[#F27D26] selection:text-black">
-      {isStale && <StaleDataWarning />}
       
       {/* Sidebar Navigation */}
       <div className="fixed left-0 top-0 h-full w-20 border-r border-white/10 flex flex-col items-center py-8 gap-8 bg-black/50 backdrop-blur-xl z-50">
@@ -380,24 +384,8 @@ function DashboardContent() {
             <div className="flex items-center gap-2">
               <span className="font-bold tracking-tighter text-xl uppercase">DEBTSTRATEGIST<span className="text-[#F27D26]">.AI</span></span>
             </div>
-            <GlobalSearch onSearch={(q) => alert(`Searching for: ${q}`)} />
           </div>
           <div className="flex gap-4">
-            {/* Executive Briefing Header */}
-            <div className="hidden xl:flex items-center gap-8 px-6 border-x border-white/10 mr-4">
-              <div className="flex flex-col">
-                <span className="text-[8px] font-bold uppercase tracking-widest opacity-40">Net Worth Velocity</span>
-                <span className="text-xs font-bold text-green-500 flex items-center gap-1">
-                  <TrendingUp size={10} /> +{netWorthVelocity}% <span className="text-[8px] opacity-40 font-normal">vs last month</span>
-                </span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-bold uppercase tracking-widest opacity-40">Freedom Clock</span>
-                <div className="flex items-center gap-2">
-                  <FreedomClock initialSeconds={freedomSeconds} variant="COMPACT" />
-                </div>
-              </div>
-            </div>
 
             <button 
               onClick={() => setIsPrivacyMode(!isPrivacyMode)}
@@ -447,19 +435,7 @@ function DashboardContent() {
               </button>
             )}
 
-            {/* AI Concierge Toggle */}
-            <button 
-              onClick={() => setIsConciergeEnabled(!isConciergeEnabled)}
-              className={cn(
-                "px-4 py-2 border rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all",
-                isConciergeEnabled 
-                  ? "bg-purple-500/10 border-purple-500 text-purple-500" 
-                  : "bg-white/5 border-white/10 hover:bg-white/10"
-              )}
-            >
-              <Sparkles size={14} />
-              {isConciergeEnabled ? 'Concierge Active' : 'Guide Me'}
-            </button>
+
 
             <button 
               onClick={handleLogout}
@@ -591,7 +567,6 @@ function DashboardContent() {
                     })));
                   } else {
                     setLoans([]);
-                    setNetWorthVelocity(8.5);
                   }
 
                   if (data.assets && data.assets.length > 0) {

@@ -18,7 +18,7 @@ const __dirname = path.dirname(__filename);
 async function startServer() {
   console.log("Starting server...");
   const app = express();
-  const PORT = 3000;
+  const PORT = parseInt(env.PORT, 10) || 3000;
 
   app.set('trust proxy', 1);
   app.use(express.json());
@@ -58,8 +58,8 @@ async function startServer() {
   // Error handler
   app.use(errorHandler);
 
-  app.listen(3000, "0.0.0.0", () => {
-    logger.info(`🚀 DebtStrategist AI Server running on http://localhost:3000`);
+  app.listen(PORT, "0.0.0.0", () => {
+    logger.info(`🚀 DebtStrategist AI Server running on port ${PORT}`);
   });
 }
 

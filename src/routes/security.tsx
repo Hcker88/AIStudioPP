@@ -26,8 +26,8 @@ export function SecurityPage() {
           transition={{ delay: 0.1 }}
           className="text-6xl lg:text-8xl font-bold tracking-tighter italic serif leading-none"
         >
-          Zero-Knowledge. <br />
-          <span className="opacity-30">Absolute Privacy.</span>
+          Data Masking. <br />
+          <span className="opacity-30">Privacy First.</span>
         </motion.h1>
         
         <motion.p 
@@ -36,7 +36,7 @@ export function SecurityPage() {
           transition={{ delay: 0.2 }}
           className="text-xl lg:text-2xl opacity-50 max-w-2xl leading-relaxed"
         >
-          We don't just encrypt your data; we make it invisible. Our Zero-Knowledge Proxy ensures that even the AI never sees your real identity.
+          We take your privacy seriously. Our AI Privacy Proxy strips out sensitive identifiers like names before sending data to the AI.
         </motion.p>
       </section>
 
@@ -44,9 +44,9 @@ export function SecurityPage() {
       <section className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-24 items-center">
         <div className="space-y-12">
           <div className="space-y-4">
-            <h2 className="text-3xl font-bold tracking-tight italic serif">The Invisible Bridge.</h2>
+            <h2 className="text-3xl font-bold tracking-tight italic serif">The Privacy Bridge.</h2>
             <p className="opacity-50 leading-relaxed">
-              When you talk to our AI, your data is masked on your device before it ever leaves the browser. We replace your name, account numbers, and bank details with generic tokens.
+              When you talk to our AI, your data is checked and parsed. We attempt to replace your name, account numbers, and bank details with generic tokens using pattern matching.
             </p>
           </div>
 

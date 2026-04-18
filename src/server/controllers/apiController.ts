@@ -4,6 +4,13 @@ import * as decisionEngine from '../services/DecisionEngine.server';
 import { OAuth2Client } from 'google-auth-library';
 import { env } from '../../lib/env.server';
 
+import { db } from '../../lib/db';
+import { users } from '../../lib/schema';
+import { eq } from 'drizzle-orm';
+import { handleChatAction } from '../../routes/api.chat.server';
+import { generateFinancialRoadmap } from '../../routes/api.export.server';
+import { syncFinancials as syncHandler } from '../../routes/api.sync.server';
+
 const oauth2Client = new OAuth2Client(
   env.GOOGLE_CLIENT_ID,
   env.GOOGLE_CLIENT_SECRET,
@@ -56,7 +63,7 @@ export const getAuthUrl = (req: Request, res: Response) => {
       prompt: 'consent'
     });
     logger.info(`Generated URL: ${url}`);
-    res.json({ success: true, data: { url, debug: { id: env.GOOGLE_CLIENT_ID, secret: env.GOOGLE_CLIENT_SECRET } } });
+    res.json({ success: true, data: { url } });
   } catch (error) {
     logger.error(error, 'Error generating auth URL');
     res.status(500).json({ success: false, error: 'Failed to generate auth URL' });
@@ -87,12 +94,32 @@ export const handleAuthCallback = async (req: Request, res: Response) => {
     });
 
     const user = userInfoResponse.data as any;
+    
+    // Upsert user to DB
+    let dbUser = await db.query.users.findFirst({
+      where: eq(users.googleId, user.sub)
+    });
+
+    if (!dbUser) {
+      const inserted = await db.insert(users).values({
+        email: user.email,
+        name: user.name,
+        googleId: user.sub,
+      }).returning();
+      dbUser = inserted[0];
+    } else {
+      const updated = await db.update(users)
+        .set({ name: user.name })
+        .where(eq(users.id, dbUser.id))
+        .returning();
+      dbUser = updated[0];
+    }
 
     if (req.session) {
       req.session.user = {
-        id: user.sub,
-        email: user.email,
-        name: user.name,
+        id: dbUser.id,
+        email: dbUser.email,
+        name: dbUser.name,
         picture: user.picture
       };
     }
@@ -105,12 +132,12 @@ export const handleAuthCallback = async (req: Request, res: Response) => {
               window.opener.postMessage({ 
                 type: 'OAUTH_AUTH_SUCCESS',
                 user: ${JSON.stringify({
-                  id: user.sub,
-                  email: user.email,
-                  name: user.name,
+                  id: dbUser.id,
+                  email: dbUser.email,
+                  name: dbUser.name,
                   picture: user.picture
                 })}
-              }, '*');
+              }, window.location.origin);
               window.close();
             } else {
               window.location.href = '/';
@@ -139,8 +166,17 @@ export const getDashboard = async (req: Request, res: Response) => {
   res.json({ success: true, data: {} });
 };
 
+import { handleOnboardingAction } from '../../routes/onboarding.server';
+
 export const handleOnboarding = async (req: Request, res: Response) => {
-  res.json({ success: true, data: {} });
+  try {
+    const data = req.body;
+    const result = await handleOnboardingAction(data);
+    res.json(result);
+  } catch (error) {
+    logger.error(error, 'Onboarding error');
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal Server Error' });
+  }
 };
 
 export const getWelcome = async (req: Request, res: Response) => {
@@ -152,7 +188,17 @@ export const getAIContext = async (req: Request, res: Response) => {
 };
 
 export const handleChat = async (req: Request, res: Response) => {
-  res.json({ success: true, data: {} });
+  try {
+    const { userId, message, financialData } = req.body;
+    if (!message) {
+      return res.status(400).json({ success: false, error: 'Message is required' });
+    }
+    const responseText = await handleChatAction(userId, message, financialData);
+    res.json({ success: true, response: responseText });
+  } catch (error) {
+    logger.error(error, 'Chat error');
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
 };
 
 export const saveStrategy = async (req: Request, res: Response) => {
@@ -160,11 +206,30 @@ export const saveStrategy = async (req: Request, res: Response) => {
 };
 
 export const syncFinancials = async (req: Request, res: Response) => {
-  res.json({ success: true, data: {} });
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ success: false, error: "Missing userId" });
+    const result = await syncHandler(userId);
+    if (!result.success) {
+      return res.status(500).json(result);
+    }
+    res.json(result);
+  } catch (error) {
+    logger.error(error, 'Sync error');
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
 };
 
 export const exportRoadmap = async (req: Request, res: Response) => {
-  res.json({ success: true, data: {} });
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ success: false, error: "Missing userId" });
+    const result = await generateFinancialRoadmap(userId);
+    res.json({ success: true, pdfBase64: result.pdfBase64 });
+  } catch (error) {
+    logger.error(error, 'Export error');
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
 };
 
 export const getMarketPulse = async (req: Request, res: Response) => {
