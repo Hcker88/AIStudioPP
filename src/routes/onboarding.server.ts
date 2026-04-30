@@ -8,17 +8,17 @@ import { eq } from 'drizzle-orm';
  */
 export const OnboardingSchema = z.object({
   userId: z.string().uuid(),
-  monthlyIncome: z.number().positive(),
+  monthlyIncome: z.number().nonnegative(),
   loans: z.array(z.object({
     name: z.string().min(1),
-    principal: z.number().positive(),
+    principal: z.number().nonnegative(),
     interestRate: z.number().min(0).max(100),
-    emi: z.number().positive(),
-    tenure: z.number().int().positive(),
+    emi: z.number().nonnegative(),
+    tenure: z.number().int().nonnegative(),
   })),
   expenses: z.array(z.object({
     category: z.string().min(1),
-    amount: z.number().positive(),
+    amount: z.number().nonnegative(),
     isFixed: z.boolean(),
   })),
 });

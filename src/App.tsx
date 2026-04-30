@@ -551,7 +551,7 @@ function DashboardContent() {
                   <p className="opacity-50 mt-4 text-lg">We need the raw numbers. Your data is encrypted and never sold.</p>
                 </div>
 
-                <ConversationForm onComplete={(data) => {
+                <ConversationForm onComplete={async (data) => {
                   console.log('Onboarding Data:', data);
                   setOnboardingData(data);
                   setIncome(data.income);
@@ -569,11 +569,31 @@ function DashboardContent() {
                     setLoans([]);
                   }
 
-                  if (data.assets && data.assets.length > 0) {
-                    const totalAssets = data.assets.reduce((acc: number, a: any) => acc + a.amount, 0);
-                    const equityAssets = data.assets.filter((a: any) => a.type === 'EQUITY').reduce((acc: number, a: any) => acc + a.amount, 0);
-                    const currentEquity = totalAssets > 0 ? Math.round((equityAssets / totalAssets) * 100) : 0;
-                    const targetEquity = 70; // Default target
+                  // Assets are present but we don't have dashboard state for them yet.
+                  // Can be processed in the future.
+
+                  // Wire onboarding data to the backend completely 
+                  if (user?.id) {
+                    try {
+                      await fetch('/api/onboarding', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          userId: user.id,
+                          monthlyIncome: data.income,
+                          loans: data.loans ? data.loans.map((l: any) => ({
+                            name: l.name,
+                            principal: l.principal,
+                            interestRate: l.rate,
+                            emi: l.emi,
+                            tenure: Math.ceil(l.principal / l.emi) || 60
+                          })) : [],
+                          expenses: data.detailedExpenses || []
+                        })
+                      });
+                    } catch (err) {
+                      console.error("Failed to save onboarding to database", err);
+                    }
                   }
 
                   setStep(2);
@@ -654,10 +674,10 @@ function DashboardContent() {
               <div className="w-6 h-6 bg-[#F27D26] rounded-sm flex items-center justify-center">
                 <TrendingUp className="text-black w-4 h-4" />
               </div>
-              <span className="font-bold tracking-tighter text-lg uppercase">DEBTSTRATEGIST.AI</span>
+              <span className="font-bold tracking-tighter text-lg uppercase">PapaProfit.ai</span>
             </div>
             <p className="text-xs opacity-40 leading-relaxed max-w-sm">
-              LEGAL DISCLAIMER: DebtStrategist.AI provides mathematical analysis based on user-provided data. We are not licensed financial advisors. Past performance is not indicative of future results.
+              LEGAL DISCLAIMER= PapaProfit:provides mathematical analysis based on user-provided data. We are not licensed financial advisors. Past performance is not indicative of future results.
             </p>
           </div>
           <div>

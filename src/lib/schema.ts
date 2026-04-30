@@ -12,7 +12,7 @@ export const users = pgTable('users', {
 
 export const financialProfiles = pgTable('financial_profiles', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => users.id).notNull(),
+  userId: uuid('user_id').references(() => users.id).notNull().unique(),
   monthlyIncome: numeric('monthly_income', { precision: 12, scale: 2 }).notNull(),
   targetEquityAllocation: numeric('target_equity_allocation', { precision: 5, scale: 2 }).default('70').notNull(),
   lastSyncedAt: timestamp('last_synced_at').defaultNow().notNull(),

@@ -18,9 +18,12 @@ export function ConversationForm({ onComplete }: ConversationFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Step 1: Income & Expenses
-  const [income, setIncome] = useState<string>('150000');
-  const [expenses, setExpenses] = useState<string>('45000');
+  const [incomes, setIncomes] = useState<{ source: string; amount: string }[]>([
+    { source: 'Primary Salary', amount: '150000' }
+  ]);
+  const [expenses, setExpenses] = useState<{ category: string; amount: string; isFixed: boolean }[]>([
+    { category: 'Housing & Utilities', amount: '45000', isFixed: true }
+  ]);
 
   // Step 2: Assets
   const [assets, setAssets] = useState<{ name: string; amount: string; type: string }[]>([
@@ -35,14 +38,26 @@ export function ConversationForm({ onComplete }: ConversationFormProps) {
   const handleNext = () => {
     setError(null);
     if (step === 1) {
-      const incomeVal = Number(income);
+      const incomeVal = incomes.reduce((acc, curr) => acc + Number(curr.amount), 0);
+      const expensesVal = expenses.reduce((acc, curr) => acc + Number(curr.amount), 0);
+      
       if (isNaN(incomeVal) || incomeVal <= 0) {
-        setError("Monthly income must be greater than ₹0 to calculate projections.");
+        setError("Total monthly income must be greater than ₹0 to calculate projections.");
         return;
       }
-      if (!dataSanitizer.sanitizeAmount(income).isValid || !dataSanitizer.sanitizeAmount(expenses).isValid) {
-        setError("Please enter valid amounts for income and expenses.");
-        return;
+      
+      for (const inc of incomes) {
+        if (!dataSanitizer.sanitizeAmount(inc.amount).isValid) {
+          setError(`Invalid amount for income: ${inc.source}`);
+          return;
+        }
+      }
+
+      for (const exp of expenses) {
+        if (!dataSanitizer.sanitizeAmount(exp.amount).isValid) {
+          setError(`Invalid amount for expense: ${exp.category}`);
+          return;
+        }
       }
       setStep(2);
     } else if (step === 2) {
@@ -73,8 +88,10 @@ export function ConversationForm({ onComplete }: ConversationFormProps) {
       // Complete
       setIsSubmitting(true);
       onComplete({
-        income: Number(income),
-        expenses: Number(expenses),
+        income: incomes.reduce((acc, curr) => acc + Number(curr.amount), 0),
+        expenses: expenses.reduce((acc, curr) => acc + Number(curr.amount), 0),
+        detailedExpenses: expenses.map(e => ({ category: e.category, amount: Number(e.amount), isFixed: e.isFixed })),
+        detailedIncomes: incomes.map(i => ({ source: i.source, amount: Number(i.amount) })),
         assets: assets.map(a => ({ ...a, amount: Number(a.amount) })),
         loans: loans.map(l => ({ ...l, principal: Number(l.principal), emi: Number(l.emi), rate: Number(l.rate) })),
         loanType: loans.length > 0 ? loans[0].name : 'None',
@@ -89,6 +106,12 @@ export function ConversationForm({ onComplete }: ConversationFormProps) {
 
   const addLoan = () => setLoans([...loans, { name: 'New Loan', principal: '0', emi: '0', rate: '10' }]);
   const removeLoan = (index: number) => setLoans(loans.filter((_, i) => i !== index));
+
+  const addIncome = () => setIncomes([...incomes, { source: 'New Income', amount: '0' }]);
+  const removeIncome = (index: number) => setIncomes(incomes.filter((_, i) => i !== index));
+
+  const addExpense = () => setExpenses([...expenses, { category: 'New Expense', amount: '0', isFixed: true }]);
+  const removeExpense = (index: number) => setExpenses(expenses.filter((_, i) => i !== index));
 
   return (
     <div className="max-w-4xl mx-auto p-8 lg:p-16 space-y-12 bg-white/5 border border-white/10 rounded-sm backdrop-blur-md">
@@ -108,20 +131,80 @@ export function ConversationForm({ onComplete }: ConversationFormProps) {
         {step === 1 && (
           <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-12">
             <h2 className="text-4xl font-bold tracking-tighter italic serif">Cashflow.</h2>
-            <div className="space-y-8 text-2xl lg:text-3xl leading-[1.6] font-medium tracking-tight">
-              <div>
-                My monthly income is ₹
-                <input 
-                  type="number" value={income} onChange={(e) => setIncome(e.target.value)}
-                  className="bg-transparent border-b-2 border-[#F27D26] w-40 focus:outline-none focus:border-white transition-colors text-center font-mono font-bold mx-2"
-                />
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+              {/* Sector 1: Income */}
+              <div className="space-y-6">
+                <div className="flex justify-between items-end border-b border-white/10 pb-4">
+                  <h3 className="text-xl font-bold tracking-tight text-[#F27D26]">Income Sources</h3>
+                  <button onClick={addIncome} className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 hover:text-white transition-colors opacity-70">
+                    <Plus size={12} /> Add Income
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {incomes.map((inc, index) => (
+                    <div key={`income-${index}`} className="flex items-center gap-4 bg-black/30 p-3 rounded-sm border border-white/5">
+                      <input 
+                        type="text" value={inc.source} onChange={(e) => { const n = [...incomes]; n[index].source = e.target.value; setIncomes(n); }}
+                        className="bg-transparent border-b border-white/10 focus:border-[#F27D26] pb-1 w-full flex-1 focus:outline-none text-sm font-medium"
+                        placeholder="Income Source"
+                      />
+                      <div className="flex items-center gap-1 text-[#F27D26]">
+                        <span>₹</span>
+                        <input 
+                          type="number" value={inc.amount} onChange={(e) => { const n = [...incomes]; n[index].amount = e.target.value; setIncomes(n); }}
+                          className="bg-transparent border-b border-white/10 focus:border-[#F27D26] pb-1 w-24 focus:outline-none font-mono text-sm text-white"
+                          placeholder="Amount"
+                        />
+                      </div>
+                      {incomes.length > 1 && (
+                        <button onClick={() => removeIncome(index)} className="text-red-400 opacity-50 hover:opacity-100 p-1">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <div className="text-right text-xs uppercase tracking-widest opacity-50 pt-2">
+                    Total Income: <span className="font-bold text-white text-sm">₹{incomes.reduce((acc, curr) => acc + Number(curr.amount), 0).toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
               </div>
-              <div>
-                and my fixed monthly expenses are ₹
-                <input 
-                  type="number" value={expenses} onChange={(e) => setExpenses(e.target.value)}
-                  className="bg-transparent border-b-2 border-[#F27D26] w-40 focus:outline-none focus:border-white transition-colors text-center font-mono font-bold mx-2"
-                />
+
+              {/* Sector 2: Expenses */}
+              <div className="space-y-6">
+                <div className="flex justify-between items-end border-b border-white/10 pb-4">
+                  <h3 className="text-xl font-bold tracking-tight text-[#F27D26]">Monthly Expenses</h3>
+                  <button onClick={addExpense} className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 hover:text-white transition-colors opacity-70">
+                    <Plus size={12} /> Add Expense
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {expenses.map((exp, index) => (
+                    <div key={`expense-${index}`} className="flex items-center gap-4 bg-black/30 p-3 rounded-sm border border-white/5">
+                      <input 
+                        type="text" value={exp.category} onChange={(e) => { const n = [...expenses]; n[index].category = e.target.value; setExpenses(n); }}
+                        className="bg-transparent border-b border-white/10 focus:border-[#F27D26] pb-1 w-full flex-1 focus:outline-none text-sm font-medium"
+                        placeholder="Expense Category"
+                      />
+                      <div className="flex items-center gap-1 text-red-400">
+                        <span>₹</span>
+                        <input 
+                          type="number" value={exp.amount} onChange={(e) => { const n = [...expenses]; n[index].amount = e.target.value; setExpenses(n); }}
+                          className="bg-transparent border-b border-white/10 focus:border-red-400 pb-1 w-24 focus:outline-none font-mono text-sm text-white"
+                          placeholder="Amount"
+                        />
+                      </div>
+                      {expenses.length > 1 && (
+                        <button onClick={() => removeExpense(index)} className="text-red-400 opacity-50 hover:opacity-100 p-1">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <div className="text-right text-xs uppercase tracking-widest opacity-50 pt-2">
+                    Total Expenses: <span className="font-bold text-white text-sm">₹{expenses.reduce((acc, curr) => acc + Number(curr.amount), 0).toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </motion.div>
