@@ -45,7 +45,7 @@ export class StrategyAuditor {
         }
       });
 
-      const auditResult = response.text.trim();
+      const auditResult = response.text?.trim() || "";
       if (auditResult === "SOUND") return null;
       return auditResult;
     } catch (error) {

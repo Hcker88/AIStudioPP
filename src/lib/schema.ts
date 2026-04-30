@@ -111,16 +111,6 @@ export const portfolioAssets = pgTable('portfolio_assets', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-export const legacyVault = pgTable('legacy_vault', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => users.id).notNull(),
-  nomineeEmail: text('nominee_email').notNull(),
-  encryptedInstructions: text('encrypted_instructions').notNull(), // AES-256 simulated
-  lastCheckIn: timestamp('last_check_in').defaultNow().notNull(),
-  deadMansSwitchDays: integer('dead_mans_switch_days').default(30).notNull(),
-  isTriggered: boolean('is_triggered').default(false).notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});
 
 export const adviceAttribution = pgTable('advice_attribution', {
   id: uuid('id').primaryKey().defaultRandom(),

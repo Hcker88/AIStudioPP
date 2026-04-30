@@ -11,12 +11,6 @@ import { handleChatAction } from '../../routes/api.chat.server';
 import { generateFinancialRoadmap } from '../../routes/api.export.server';
 import { syncFinancials as syncHandler } from '../../routes/api.sync.server';
 
-const oauth2Client = new OAuth2Client(
-  env.GOOGLE_CLIENT_ID,
-  env.GOOGLE_CLIENT_SECRET,
-  // Use APP_URL if available, otherwise fallback to a default or construct dynamically
-  env.APP_URL ? `${env.APP_URL}/api/auth/callback` : 'postmessage'
-);
 
 export const healthCheck = (req: Request, res: Response) => {
   logger.info('Health check called');
@@ -162,15 +156,40 @@ export const logout = (req: Request, res: Response) => {
   res.json({ success: true });
 };
 
+import { handleOnboardingAction } from '../../routes/onboarding.server';
+import { loadDashboardData } from '../../routes/dashboard.server';
+import { saveStrategy as saveStrategyHandler } from '../../routes/api.save-strategy.server';
+import { parseStatementText } from '../../routes/api.parse.server';
+
 export const getDashboard = async (req: Request, res: Response) => {
-  res.json({ success: true, data: {} });
+  try {
+    const userId = req.session?.user?.id;
+    const result = await loadDashboardData(userId);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error(error, 'Dashboard load error');
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
 };
 
-import { handleOnboardingAction } from '../../routes/onboarding.server';
+export const parseStatement = async (req: Request, res: Response) => {
+  try {
+    const { text } = req.body;
+    if (!text) {
+      return res.status(400).json({ success: false, error: 'Text content is required' });
+    }
+    const result = await parseStatementText(text);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error(error, 'Parse statement error');
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+};
 
 export const handleOnboarding = async (req: Request, res: Response) => {
   try {
-    const data = req.body;
+    const userId = req.session?.user?.id;
+    const data = { ...req.body, userId };
     const result = await handleOnboardingAction(data);
     res.json(result);
   } catch (error) {
@@ -179,17 +198,11 @@ export const handleOnboarding = async (req: Request, res: Response) => {
   }
 };
 
-export const getWelcome = async (req: Request, res: Response) => {
-  res.json({ success: true, data: {} });
-};
-
-export const getAIContext = async (req: Request, res: Response) => {
-  res.json({ success: true, data: {} });
-};
 
 export const handleChat = async (req: Request, res: Response) => {
   try {
-    const { userId, message, financialData } = req.body;
+    const userId = req.session?.user?.id;
+    const { message, financialData } = req.body;
     if (!message) {
       return res.status(400).json({ success: false, error: 'Message is required' });
     }
@@ -202,12 +215,19 @@ export const handleChat = async (req: Request, res: Response) => {
 };
 
 export const saveStrategy = async (req: Request, res: Response) => {
-  res.json({ success: true, data: {} });
+  try {
+    const userId = req.session?.user?.id;
+    const result = await saveStrategyHandler({ ...req.body, userId });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error(error, 'Save strategy error');
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
 };
 
 export const syncFinancials = async (req: Request, res: Response) => {
   try {
-    const { userId } = req.body;
+    const userId = req.session?.user?.id;
     if (!userId) return res.status(400).json({ success: false, error: "Missing userId" });
     const result = await syncHandler(userId);
     if (!result.success) {
@@ -222,7 +242,7 @@ export const syncFinancials = async (req: Request, res: Response) => {
 
 export const exportRoadmap = async (req: Request, res: Response) => {
   try {
-    const { userId } = req.body;
+    const userId = req.session?.user?.id;
     if (!userId) return res.status(400).json({ success: false, error: "Missing userId" });
     const result = await generateFinancialRoadmap(userId);
     res.json({ success: true, pdfBase64: result.pdfBase64 });
@@ -232,22 +252,3 @@ export const exportRoadmap = async (req: Request, res: Response) => {
   }
 };
 
-export const getMarketPulse = async (req: Request, res: Response) => {
-  res.json({ success: true, data: {} });
-};
-
-export const getAnnualReport = async (req: Request, res: Response) => {
-  res.json({ success: true, data: {} });
-};
-
-export const saveFeedback = async (req: Request, res: Response) => {
-  res.json({ success: true, data: {} });
-};
-
-export const logAdvice = async (req: Request, res: Response) => {
-  res.json({ success: true, data: {} });
-};
-
-export const markAdviceFollowed = async (req: Request, res: Response) => {
-  res.json({ success: true, data: {} });
-};

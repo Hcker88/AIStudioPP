@@ -98,7 +98,19 @@ export async function generateFinancialRoadmap(userId: string) {
     
     doc.setFontSize(10);
     doc.setTextColor(50);
-    const verdict = "Based on your current debt-to-income ratio, prioritizing the ICICI Personal Loan (14.5%) while maintaining your HDFC Home Loan interest deduction is the optimal path. Your projected debt-free date is OCT 2035.";
+    
+    let targetLoanName = "your highest interest debt";
+    let targetRate = 0;
+    if (userLoans.length > 0) {
+      const highest = userLoans.reduce((prev, current) => (Number(prev.interestRate) > Number(current.interestRate)) ? prev : current);
+      targetLoanName = highest.name;
+      targetRate = Number(highest.interestRate);
+    }
+    
+    const verdict = userLoans.length > 0 
+      ? `Based on your current debt-to-income ratio, prioritizing the ${targetLoanName} (${targetRate}%) is the mathematically optimal path to minimize interest paid.`
+      : "You are currently debt-free. Your focus should shift entirely to wealth accumulation and tax optimization.";
+      
     const splitVerdict = doc.splitTextToSize(verdict, pageWidth - (margin * 2));
     doc.text(splitVerdict, margin, finalY2 + 30);
 

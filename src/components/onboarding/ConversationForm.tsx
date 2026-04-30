@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowRight, Sparkles, Zap, AlertCircle, ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowRight, Sparkles, Zap, AlertCircle, ArrowLeft, Plus, Trash2, FileText } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { dataSanitizer } from '../../lib/ai/dataSanitizer';
 
@@ -35,68 +35,112 @@ export function ConversationForm({ onComplete }: ConversationFormProps) {
     { name: 'Home Loan', principal: '4500000', emi: '38000', rate: '8.5' }
   ]);
 
+  const [isParsing, setIsParsing] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsParsing(true);
+    setError(null);
+    try {
+      const text = await file.text();
+      const response = await fetch('/api/parse-statement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) throw new Error('Analysis failed.');
+      
+      const resData = await response.json();
+      if (resData.success && resData.data) {
+        if (resData.data.incomes && resData.data.incomes.length > 0) setIncomes(resData.data.incomes);
+        if (resData.data.expenses && resData.data.expenses.length > 0) setExpenses(resData.data.expenses);
+        if (resData.data.assets && resData.data.assets.length > 0) setAssets(resData.data.assets);
+        if (resData.data.loans && resData.data.loans.length > 0) setLoans(resData.data.loans);
+      } else {
+        throw new Error('Unable to parse document format.');
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Import failed. Please try adding manually.');
+    } finally {
+      setIsParsing(false);
+      // reset file input
+      e.target.value = '';
+    }
+  };
+
+  const applySanitizedAmounts = (items: any[], type: 'incomes' | 'expenses' | 'assets') => {
+    let hasError = false;
+    let errorMessage = '';
+    const correctedItems = items.map(item => {
+      const res = dataSanitizer.sanitizeAmount(item.amount);
+      if (res.type === 'ERROR') {
+        hasError = true;
+        errorMessage = res.message || 'Invalid amount.';
+      } else if (res.type === 'CORRECTION' && res.correctedValue !== undefined) {
+        return { ...item, amount: res.correctedValue.toString() };
+      }
+      return item;
+    });
+    return { hasError, errorMessage, correctedItems };
+  };
+
   const handleNext = () => {
     setError(null);
     if (step === 1) {
-      const incomeVal = incomes.reduce((acc, curr) => acc + Number(curr.amount), 0);
-      const expensesVal = expenses.reduce((acc, curr) => acc + Number(curr.amount), 0);
+      const { hasError: incErr, errorMessage: incMsg, correctedItems: nextIncomes } = applySanitizedAmounts(incomes, 'incomes');
+      if (incErr) { setError(incMsg); return; }
+      
+      const { hasError: expErr, errorMessage: expMsg, correctedItems: nextExpenses } = applySanitizedAmounts(expenses, 'expenses');
+      if (expErr) { setError(expMsg); return; }
+
+      setIncomes(nextIncomes);
+      setExpenses(nextExpenses);
+
+      const incomeVal = nextIncomes.reduce((acc, curr) => acc + Number(curr.amount), 0);
       
       if (isNaN(incomeVal) || incomeVal <= 0) {
         setError("Total monthly income must be greater than ₹0 to calculate projections.");
         return;
       }
-      
-      for (const inc of incomes) {
-        if (!dataSanitizer.sanitizeAmount(inc.amount).isValid) {
-          setError(`Invalid amount for income: ${inc.source}`);
-          return;
-        }
-      }
-
-      for (const exp of expenses) {
-        if (!dataSanitizer.sanitizeAmount(exp.amount).isValid) {
-          setError(`Invalid amount for expense: ${exp.category}`);
-          return;
-        }
-      }
       setStep(2);
     } else if (step === 2) {
-      for (const asset of assets) {
-        if (!dataSanitizer.sanitizeAmount(asset.amount).isValid) {
-          setError(`Invalid amount for asset: ${asset.name}`);
-          return;
-        }
-      }
+      const { hasError: astErr, errorMessage: astMsg, correctedItems: nextAssets } = applySanitizedAmounts(assets, 'assets');
+      if (astErr) { setError(astMsg); return; }
+      setAssets(nextAssets);
       setStep(3);
     } else if (step === 3) {
-      for (const loan of loans) {
-        const rateVal = Number(loan.rate);
-        if (rateVal >= 100) {
-          setError(`Interest rate for ${loan.name} cannot be 100% or more.`);
-          return;
-        }
-        if (!dataSanitizer.sanitizeAmount(loan.principal).isValid || !dataSanitizer.sanitizeAmount(loan.emi).isValid || !dataSanitizer.sanitizeInterestRate(loan.rate).isValid) {
-          // If it's just a warning from sanitizer, we can let it pass, but sanitizer sets isValid: false for warnings.
-          // Let's bypass the strict sanitizer check if rate is between 0 and 100 for this specific edge case fix.
-          if (rateVal < 0 || isNaN(rateVal)) {
-            setError(`Invalid details for loan: ${loan.name}`);
-            return;
-          }
-        }
+      const nextLoans = [...loans];
+      for (const [index, loan] of loans.entries()) {
+        const prinRes = dataSanitizer.sanitizeAmount(loan.principal);
+        if (prinRes.type === 'ERROR') { setError(`Invalid principal for ${loan.name}`); return; }
+        if (prinRes.correctedValue !== undefined) nextLoans[index].principal = prinRes.correctedValue.toString();
+
+        const emiRes = dataSanitizer.sanitizeAmount(loan.emi);
+        if (emiRes.type === 'ERROR') { setError(`Invalid EMI for ${loan.name}`); return; }
+        if (emiRes.correctedValue !== undefined) nextLoans[index].emi = emiRes.correctedValue.toString();
+
+        const rateRes = dataSanitizer.sanitizeInterestRate(loan.rate);
+        if (rateRes.type === 'ERROR') { setError(rateRes.message || `Invalid rate for ${loan.name}`); return; }
+        if (rateRes.correctedValue !== undefined) nextLoans[index].rate = rateRes.correctedValue.toString();
       }
+      setLoans(nextLoans);
       
       // Complete
       setIsSubmitting(true);
       onComplete({
-        income: incomes.reduce((acc, curr) => acc + Number(curr.amount), 0),
-        expenses: expenses.reduce((acc, curr) => acc + Number(curr.amount), 0),
-        detailedExpenses: expenses.map(e => ({ category: e.category, amount: Number(e.amount), isFixed: e.isFixed })),
-        detailedIncomes: incomes.map(i => ({ source: i.source, amount: Number(i.amount) })),
-        assets: assets.map(a => ({ ...a, amount: Number(a.amount) })),
-        loans: loans.map(l => ({ ...l, principal: Number(l.principal), emi: Number(l.emi), rate: Number(l.rate) })),
-        loanType: loans.length > 0 ? loans[0].name : 'None',
-        emi: loans.length > 0 ? Number(loans[0].emi) : 0,
-        rate: loans.length > 0 ? Number(loans[0].rate) : 0
+        income: incomes.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0),
+        expenses: expenses.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0),
+        detailedExpenses: expenses.map((e: any) => ({ category: e.category, amount: Number(e.amount), isFixed: e.isFixed })),
+        detailedIncomes: incomes.map((i: any) => ({ source: i.source, amount: Number(i.amount) })),
+        assets: assets.map((a: any) => ({ ...a, amount: Number(a.amount) })),
+        loans: nextLoans.map((l: any) => ({ ...l, principal: Number(l.principal), emi: Number(l.emi), rate: Number(l.rate) })),
+        loanType: nextLoans.length > 0 ? nextLoans[0].name : 'None',
+        emi: nextLoans.length > 0 ? Number(nextLoans[0].emi) : 0,
+        rate: nextLoans.length > 0 ? Number(nextLoans[0].rate) : 0
       });
     }
   };
@@ -120,10 +164,25 @@ export function ConversationForm({ onComplete }: ConversationFormProps) {
           <Sparkles size={16} />
           <span className="text-[10px] font-bold uppercase tracking-widest">Financial Audit • Step 0{step}/03</span>
         </div>
-        <div className="flex gap-2">
-          {[1, 2, 3].map(i => (
-            <div key={i} className={cn("h-1 w-8 rounded-full transition-colors", step >= i ? "bg-[#F27D26]" : "bg-white/20")} />
-          ))}
+        <div className="flex items-center gap-6">
+          <div className="relative group">
+            <input 
+              type="file" 
+              accept=".csv,.txt"
+              onChange={handleFileUpload}
+              disabled={isParsing}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed" 
+            />
+            <button disabled={isParsing} className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 text-[#F27D26] hover:text-white transition-colors bg-[#F27D26]/10 px-3 py-1.5 rounded-sm border border-[#F27D26]/20 group-hover:border-[#F27D26]/50">
+              {isParsing ? <Zap size={14} className="animate-pulse" /> : <FileText size={14} />}
+              {isParsing ? 'Analyzing...' : 'Auto-Import CSV'}
+            </button>
+          </div>
+          <div className="flex gap-2">
+            {[1, 2, 3].map(i => (
+              <div key={i} className={cn("h-1 w-8 rounded-full transition-colors", step >= i ? "bg-[#F27D26]" : "bg-white/20")} />
+            ))}
+          </div>
         </div>
       </div>
 

@@ -26,7 +26,7 @@ export class AIService {
       }
     });
 
-    const primaryText = response.text;
+    const primaryText = response.text || '';
 
     // 2. Hidden Audit Step
     const auditCheck = await this.auditor.auditStrategy(primaryText);

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { 
@@ -38,15 +38,19 @@ import {
 } from 'lucide-react';
 import { StatCard } from './components/ui/StatCard';
 import { LoanRow } from './components/ui/LoanRow';
-import { AdvisoryChat } from './components/chat/AdvisoryChat';
 import { StrategyProvider, useStrategy } from './contexts/StrategyContext';
 import { formatINR } from './lib/formatters';
 import { cn } from './lib/utils';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { DashboardSkeleton } from './components/ui/Skeleton';
 
-import { SecurityPage } from './routes/security';
-import { ConversationForm } from './components/onboarding/ConversationForm';
+import { LandingPage } from './components/landing/LandingPage';
+import { OnboardingSection } from './components/onboarding/OnboardingSection';
+import { DashboardSection } from './components/dashboard/DashboardSection';
+
+const AdvisoryChat = lazy(() => import('./components/chat/AdvisoryChat').then(m => ({ default: m.AdvisoryChat })));
+const SecurityPage = lazy(() => import('./routes/security').then(m => ({ default: m.SecurityPage })));
+const ConversationForm = lazy(() => import('./components/onboarding/ConversationForm').then(m => ({ default: m.ConversationForm })));
 
 function DashboardContent() {
   const [step, setStep] = useState(0); // 0: Landing, 1: Interrogation, 2: Dashboard
@@ -93,29 +97,14 @@ function DashboardContent() {
       
       if (user) {
         setUser(user);
-        localStorage.setItem('debt_strategist_user', JSON.stringify(user));
         // Do not skip to step 2, let them click "Begin Interrogation"
       } else {
-        console.log("No user found in session. Checking localStorage...");
-        const storedUser = localStorage.getItem('debt_strategist_user');
-        if (storedUser) {
-          try {
-            const parsedUser = JSON.parse(storedUser);
-            console.log("Using user from localStorage:", parsedUser);
-            setUser(parsedUser);
-          } catch (e) {
-            console.error("Failed to parse stored user", e);
-          }
-        }
+        console.log("No user found in session.");
+        setUser(null);
       }
     } catch (error) {
       console.error("Failed to fetch user:", error);
-      const storedUser = localStorage.getItem('debt_strategist_user');
-      if (storedUser) {
-        try {
-          setUser(JSON.parse(storedUser));
-        } catch (e) {}
-      }
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
@@ -173,7 +162,6 @@ function DashboardContent() {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
       setUser(null);
-      localStorage.removeItem('debt_strategist_user');
       setStep(0);
     } catch (error) {
       console.error("Logout failed:", error);
@@ -195,7 +183,6 @@ function DashboardContent() {
         if (event.data.user) {
           console.log("Using user data from postMessage:", event.data.user);
           setUser(event.data.user);
-          localStorage.setItem('debt_strategist_user', JSON.stringify(event.data.user));
           // Do not skip to step 2, let them click "Begin Interrogation"
           setIsLoading(false);
         } else {
@@ -338,7 +325,7 @@ function DashboardContent() {
               </div>
             )}
             <p className="text-[10px] uppercase tracking-[0.2em] opacity-40">
-              Zero-Knowledge Architecture • Bank-Grade Security
+              Encrypted Architecture • Standard Security
             </p>
           </div>
 
@@ -410,11 +397,6 @@ function DashboardContent() {
             </button>
 
 
-            <div className="px-4 py-2 bg-white/5 border border-white/10 rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-              Live Market Data
-            </div>
-
             <button 
               onClick={() => setView('SECURITY')}
               className="px-4 py-2 bg-white/5 border border-white/10 rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-white/10 transition-colors"
@@ -453,215 +435,81 @@ function DashboardContent() {
                 <button onClick={() => setView('APP')} className="mb-8 text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:text-[#F27D26]">
                   <ArrowRight className="rotate-180" size={14} /> Back to App
                 </button>
-                <SecurityPage />
+                <Suspense fallback={<div className="flex justify-center p-12"><div className="w-8 h-8 border-4 border-t-[#F27D26] border-white/10 rounded-full animate-spin"></div></div>}>
+                  <SecurityPage />
+                </Suspense>
               </motion.div>
             )}
 
-
-
             {view === 'APP' && (
               <>
-            {step === 0 && (
-              <motion.section 
-                key="landing"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="grid grid-cols-1 lg:grid-cols-2 gap-24 items-center py-12"
-              >
-                <div className="space-y-8">
-                  <h1 className="text-7xl md:text-8xl font-bold tracking-tighter leading-[0.85] uppercase">
-                    Stop Guessing.<br />
-                    <span className="text-[#F27D26]">Start Solving.</span>
-                  </h1>
-                  <p className="max-w-xl text-lg opacity-60">
-                    The only AI strategist that uses deterministic math to compare your high-interest debt against market ROI. No hallucinations. Just ROI.
-                  </p>
-                  <div className="flex gap-4">
-                    <button 
-                      onClick={() => setStep(1)}
-                      className="bg-[#F27D26] text-black px-8 py-4 font-bold text-lg rounded-sm hover:scale-105 transition-transform flex items-center gap-2"
-                    >
-                      BEGIN THE INTERROGATION <ArrowRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Instant Interest Killer Tool */}
-                <div className="bg-white/5 border border-white/10 p-8 rounded-sm space-y-8 backdrop-blur-md relative group">
-                  <div className="absolute -top-4 -right-4 bg-[#F27D26] text-black text-[10px] font-bold px-3 py-1 uppercase tracking-widest animate-bounce">
-                    Lead Magnet
-                  </div>
-                  <div>
-                    <span className="text-[#F27D26] font-mono text-xs tracking-widest uppercase">Tool: Interest Killer</span>
-                    <h2 className="text-3xl font-bold tracking-tight mt-2 italic serif">The Lazy Interest Trap.</h2>
-                  </div>
-
-                  <div className="space-y-6">
-                    <div className="border-l-2 border-[#F27D26] pl-6 py-2">
-                      <label className="block text-xs uppercase tracking-widest opacity-40 mb-2">Total Debt Amount (₹)</label>
-                      <input 
-                        type="number" 
-                        value={hookDebt}
-                        onChange={(e) => setHookDebt(Number(e.target.value))}
-                        className="bg-transparent border-b border-white/20 w-full py-2 text-3xl font-mono focus:outline-none focus:border-[#F27D26] transition-colors"
-                      />
-                    </div>
-                    <div className="border-l-2 border-white/10 pl-6 py-2">
-                      <label className="block text-xs uppercase tracking-widest opacity-40 mb-2">Interest Rate (APR %)</label>
-                      <input 
-                        type="number" 
-                        value={hookRate}
-                        onChange={(e) => setHookRate(Number(e.target.value))}
-                        className="bg-transparent border-b border-white/20 w-full py-2 text-3xl font-mono focus:outline-none focus:border-[#F27D26] transition-colors"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-8 border-t border-white/10">
-                    <p className="text-[10px] uppercase tracking-widest opacity-40 mb-2">Projected 10-Year Interest</p>
-                    <p className="text-5xl font-bold tracking-tighter text-[#F27D26] animate-pulse">
-                      ₹{formatINR(hookDebt * (hookRate / 100) * 10)}
-                    </p>
-                    <p className="text-xs opacity-60 mt-4 leading-relaxed">
-                      You are set to pay this in <span className="text-white font-bold italic">"Lazy Interest"</span> to the bank. Click below to kill it using AI.
-                    </p>
-                    <button 
-                      onClick={() => setStep(1)}
-                      className="w-full mt-8 bg-white text-black py-4 font-bold uppercase tracking-widest hover:bg-[#F27D26] transition-colors flex items-center justify-center gap-2"
-                    >
-                      Kill This Interest <Zap size={16} />
-                    </button>
-                  </div>
-                </div>
-              </motion.section>
-            )}
-
-            {step === 1 && (
-              <motion.section 
-                key="quiz"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="max-w-4xl mx-auto py-24"
-              >
-                <div className="mb-16 text-center">
-                  <span className="text-[#F27D26] font-mono text-sm tracking-widest uppercase">Phase 01: Liabilities</span>
-                  <h2 className="text-5xl font-bold tracking-tight mt-4 italic serif">The Interrogation.</h2>
-                  <p className="opacity-50 mt-4 text-lg">We need the raw numbers. Your data is encrypted and never sold.</p>
-                </div>
-
-                <ConversationForm onComplete={async (data) => {
-                  console.log('Onboarding Data:', data);
-                  setOnboardingData(data);
-                  setIncome(data.income);
-                  setExpenses(data.expenses);
-                  
-                  if (data.loans && data.loans.length > 0) {
-                    setLoans(data.loans.map((l: any) => ({
-                      name: l.name,
-                      principal: l.principal,
-                      interestRate: l.rate,
-                      emi: l.emi,
-                      tenure: Math.ceil(l.principal / l.emi) || 60
-                    })));
-                  } else {
-                    setLoans([]);
-                  }
-
-                  // Assets are present but we don't have dashboard state for them yet.
-                  // Can be processed in the future.
-
-                  // Wire onboarding data to the backend completely 
-                  if (user?.id) {
-                    try {
-                      await fetch('/api/onboarding', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          userId: user.id,
-                          monthlyIncome: data.income,
-                          loans: data.loans ? data.loans.map((l: any) => ({
-                            name: l.name,
-                            principal: l.principal,
-                            interestRate: l.rate,
-                            emi: l.emi,
-                            tenure: Math.ceil(l.principal / l.emi) || 60
-                          })) : [],
-                          expenses: data.detailedExpenses || []
-                        })
-                      });
-                    } catch (err) {
-                      console.error("Failed to save onboarding to database", err);
-                    }
-                  }
-
-                  setStep(2);
-                }} />
-              </motion.section>
-            )}
-
-            {step === 2 && (
-              <motion.section 
-                key="dashboard"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="grid grid-cols-12 gap-8"
-              >
-
-                {isLoading ? (
-                  <div className="col-span-12">
-                    <DashboardSkeleton />
-                  </div>
-                ) : (
-                  <>
-                    {/* Left Column: Command Center */}
-                    <div className="col-span-12 lg:col-span-8 space-y-12">
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <StatCard label="Monthly Income" value={formatINR(income, true, isPrivacyMode)} isPrivacyMode={isPrivacyMode} />
-                        <StatCard label="Total Debt" value={formatINR(loans.reduce((acc, l) => acc + l.principal, 0), true, isPrivacyMode)} isPrivacyMode={isPrivacyMode} />
-                        <StatCard label="Monthly EMI" value={formatINR(loans.reduce((acc, l) => acc + l.emi, 0), true, isPrivacyMode)} isPrivacyMode={isPrivacyMode} />
-                      </div>
-
-                      {/* Main Content Area */}
-                      <div className="space-y-12">
-                        {/* Bottom: Breakdown */}
-                        <div className="bg-white/5 border border-white/10 rounded-sm">
-                          <div className="p-6 border-b border-white/10 flex justify-between items-center">
-                            <h3 className="text-xs font-bold uppercase tracking-widest">Liability Breakdown</h3>
-                          </div>
-                          <div className="divide-y divide-white/5">
-                            {loans.map((loan, i) => (
-                              <LoanRow 
-                                key={i}
-                                name={loan.name} 
-                                apr={loan.interestRate} 
-                                emi={loan.emi} 
-                                priority={loan.interestRate > 12 ? "HIGH" : "MEDIUM"} 
-                                isPrivacyMode={isPrivacyMode}
-                                highlight={highlightedCard === loan.name}
-                                onClose={() => {
-                                  triggerCelebration();
-                                  setShowConfetti(true);
-                                  setTimeout(() => setShowConfetti(false), 5000);
-                                }}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right Column: The Coach */}
-                    <div className="col-span-12 lg:col-span-4 space-y-8 h-[calc(100vh-160px)] sticky top-32">
-                      <AdvisoryChat user={user} highestLoanName={loans.length > 0 ? loans.reduce((prev, current) => (prev.interestRate > current.interestRate) ? prev : current).name : "No loans"} highestLoanRate={loans.length > 0 ? loans.reduce((prev, current) => (prev.interestRate > current.interestRate) ? prev : current).interestRate : 0} />
-                    </div>
-                  </>
+                {step === 0 && (
+                  <motion.section 
+                    key="landing"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="grid grid-cols-1 lg:grid-cols-2 gap-24 items-center py-12"
+                  >
+                    <LandingPage 
+                      handleLogin={() => setStep(1)} 
+                      loginError={loginError}
+                      hookDebt={hookDebt}
+                      setHookDebt={setHookDebt}
+                      hookRate={hookRate}
+                      setHookRate={setHookRate}
+                      onNext={() => setStep(1)}
+                    />
+                  </motion.section>
                 )}
-              </motion.section>
-            )}
-            </>
+
+                {step === 1 && (
+                  <motion.section 
+                    key="quiz"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="max-w-4xl mx-auto py-24"
+                  >
+                    <OnboardingSection 
+                      user={user}
+                      setOnboardingData={setOnboardingData}
+                      setIncome={setIncome}
+                      setExpenses={setExpenses}
+                      setLoans={setLoans}
+                      onComplete={() => setStep(2)}
+                    />
+                  </motion.section>
+                )}
+
+                {step === 2 && (
+                  <motion.section 
+                    key="dashboard"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="grid grid-cols-12 gap-8"
+                  >
+                    {isLoading ? (
+                      <div className="col-span-12">
+                        <DashboardSkeleton />
+                      </div>
+                    ) : (
+                      <DashboardSection 
+                        income={income}
+                        loans={loans}
+                        isPrivacyMode={isPrivacyMode}
+                        highlightedCard={highlightedCard}
+                        user={user}
+                        onLoanClose={() => {
+                          triggerCelebration();
+                          setShowConfetti(true);
+                          setTimeout(() => setShowConfetti(false), 5000);
+                        }}
+                      />
+                    )}
+                  </motion.section>
+                )}
+              </>
             )}
           </AnimatePresence>
         </main>

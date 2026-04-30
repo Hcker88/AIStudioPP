@@ -1,4 +1,4 @@
-import { Type } from "@google/genai";
+import { Type, Schema } from "@google/genai";
 import { GoogleGenAI } from "@google/genai";
 import { getAIPromptContext } from "../services/ai_context.server";
 import { validateAndSanitizeResponse, extractROIs } from "../lib/ai/validator";
@@ -14,6 +14,8 @@ import { legacyCalculator } from "../lib/legacyCalculator";
 
 import { AIPrivacyProxy } from "../services/ai_proxy.server";
 import { strategyCache, generateVersionHash } from "../lib/cache/strategyCache";
+
+import { env } from "../lib/env.server";
 
 export async function handleChatAction(userId: string, userMessage: string, financialData?: any) {
   // 0. Strategy Caching Logic
@@ -32,16 +34,16 @@ export async function handleChatAction(userId: string, userMessage: string, fina
   }
 
   // 1. Get System Context (Stateless)
-  const systemInstruction = await getAIPromptContext(userId);
+  const systemInstruction = await getAIPromptContext(userId) + "\n\nCRITICAL: You must return ONLY a JSON response conforming to the schema provided. Each response should contain an array of actionable recommendations (cards) that the user can take right now. Keep it brief and actionable, no long paragraphs.";
 
   // 2. Initialize Gemini
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-  const auditor = new StrategyAuditor(process.env.GEMINI_API_KEY!);
+  const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+  const auditor = new StrategyAuditor(env.GEMINI_API_KEY);
   
   // 3. AI Privacy Proxy - Masking
   const maskedMessage = AIPrivacyProxy.mask(userMessage);
 
-  // 4. Define Tools
+  // 4. Define Tools (omitted for now to force JSON schema, but we can keep them if we use structured output)
   const tools = [
     {
       functionDeclarations: [
@@ -56,6 +58,32 @@ export async function handleChatAction(userId: string, userMessage: string, fina
     }
   ];
 
+  const responseSchema: Schema = {
+    type: Type.OBJECT,
+    properties: {
+      message: {
+        type: Type.STRING,
+        description: "A brief, punchy summary of the current financial situation (1-2 sentences max)."
+      },
+      actions: {
+        type: Type.ARRAY,
+        description: "A list of concrete, actionable next moves the user should take immediately.",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING, description: "Short title of the action (e.g. 'Prepay ₹12,000 on Home Loan')" },
+            targetId: { type: Type.STRING, description: "The ID or name of the loan or category to target" },
+            reason: { type: Type.STRING, description: "Why this is the best move (the math or psychology behind it)" },
+            impact: { type: Type.STRING, description: "The projected impact (e.g., 'Saves ₹45,000 in interest')" },
+            riskWarning: { type: Type.STRING, description: "Any liquidity or risk warnings to consider before doing this" }
+          },
+          required: ["title", "targetId", "reason", "impact"]
+        }
+      }
+    },
+    required: ["message", "actions"]
+  };
+
   // 5. Generate Content
   const response = await ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
@@ -64,6 +92,8 @@ export async function handleChatAction(userId: string, userMessage: string, fina
       systemInstruction,
       tools,
       temperature: 0.2,
+      responseMimeType: "application/json",
+      responseSchema: responseSchema
     }
   });
 

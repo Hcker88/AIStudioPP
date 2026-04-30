@@ -127,8 +127,8 @@ export function SecurityPage() {
             <p className="text-[11px] opacity-40 leading-relaxed">Our financial formulas are transparent and verified against standard banking ROI models.</p>
           </div>
           <div className="space-y-2">
-            <h4 className="text-xs font-bold uppercase tracking-widest">Bank-Grade SSL</h4>
-            <p className="text-[11px] opacity-40 leading-relaxed">All connections are secured with 256-bit encryption, the same standard used by global banks.</p>
+            <h4 className="text-xs font-bold uppercase tracking-widest">Encrypted Connections</h4>
+            <p className="text-[11px] opacity-40 leading-relaxed">All web connections are secured with standard HTTPS encryption in transit.</p>
           </div>
         </div>
       </section>

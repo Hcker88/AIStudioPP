@@ -5,9 +5,18 @@ import { cn } from '@/src/lib/utils';
 import { useStrategy } from '../../contexts/StrategyContext';
 import { formatINR } from '../../lib/formatters';
 
+interface ActionCard {
+  title: string;
+  targetId: string;
+  reason: string;
+  impact: string;
+  riskWarning?: string;
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  actions?: ActionCard[];
 }
 
 interface AdvisoryChatProps {
@@ -71,9 +80,20 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
       if (!response.ok) throw new Error('Chat failed');
 
       const data = await response.json();
+      let rawText = data.response;
+      let parsedMsg = "";
+      let parsedActions: ActionCard[] = [];
+
+      try {
+        const parsed = JSON.parse(rawText);
+        parsedMsg = parsed.message || parsed.content || "Strategy Updated.";
+        parsedActions = parsed.actions || [];
+      } catch (e) {
+        parsedMsg = rawText; // Fallback to raw text if not valid JSON
+      }
       
-      // Handle strategy highlighting
-      const highlightMatch = data.response.match(/\[HIGHLIGHT:(.*?)\]/);
+      // Handle legacy strategy highlighting
+      const highlightMatch = parsedMsg.match(/\[HIGHLIGHT:(.*?)\]/);
       if (highlightMatch) {
         setHighlightedCard(highlightMatch[1]);
         // Clear highlight after 5 seconds
@@ -82,7 +102,8 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
 
       const assistantMsg: Message = { 
         role: 'assistant', 
-        content: data.response.replace(/\[HIGHLIGHT:.*?\]/g, '').trim() 
+        content: parsedMsg.replace(/\[HIGHLIGHT:.*?\]/g, '').trim(),
+        actions: parsedActions
       };
       setMessages(prev => [...prev, assistantMsg]);
     } catch (error) {
@@ -92,8 +113,6 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
       setIsTyping(false);
     }
   };
-
-
 
   const suggestions = [
     `Should I invest ₹10k in Nifty 50 or pay my ${highestLoanName}?`,
@@ -126,19 +145,39 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className={cn(
-                "max-w-[85%] p-3 rounded-sm text-sm leading-relaxed",
-                msg.role === 'user' 
-                  ? "ml-auto bg-[#F27D26] text-black font-medium" 
-                  : "bg-white/10 border border-white/5 backdrop-blur-sm"
+                "flex flex-col gap-2",
+                msg.role === 'user' ? "items-end" : "items-start"
               )}
             >
-              {msg.content.split('\n').map((line, j) => (
-                <p key={j} className={cn(line.startsWith('[Verified') ? "mt-3 pt-3 border-t border-white/10 font-mono text-[10px] opacity-60" : "")}>
-                  {line}
-                </p>
-              ))}
-              
+              <div className={cn(
+                "max-w-[85%] p-3 rounded-sm text-sm leading-relaxed",
+                msg.role === 'user' 
+                  ? "bg-[#F27D26] text-black font-medium" 
+                  : "bg-white/10 border border-white/5 backdrop-blur-sm"
+              )}>
+                {msg.content.split('\n').map((line, j) => (
+                  <p key={j} className={cn(line.startsWith('[Verified') ? "mt-3 pt-3 border-t border-white/10 font-mono text-[10px] opacity-60" : "")}>
+                    {line}
+                  </p>
+                ))}
+              </div>
 
+              {msg.actions && msg.actions.length > 0 && (
+                <div className="flex flex-col gap-2 mt-2 w-[85%]">
+                  {msg.actions.map((act, idx) => (
+                    <div key={idx} className="bg-black/40 border border-[#F27D26]/30 p-3 rounded-sm text-sm relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 p-1 bg-[#F27D26]/20 text-[10px] font-bold text-[#F27D26] uppercase tracking-widest">Action</div>
+                      <h4 className="font-bold text-white mb-1 pr-12">{act.title}</h4>
+                      <p className="opacity-70 text-xs mb-2">{act.reason}</p>
+                      <div className="flex justify-between items-center mt-2">
+                        <span className="text-[10px] uppercase tracking-widest text-[#F27D26]">{act.impact}</span>
+                        <button className="text-[10px] bg-white text-black px-2 py-1 font-bold uppercase hover:bg-[#F27D26] transition-colors rounded-sm">Accept Play</button>
+                      </div>
+                      {act.riskWarning && <p className="text-[10px] text-red-400 opacity-80 mt-2 border-t border-red-400/20 pt-1">Risk: {act.riskWarning}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           ))}
           {isTyping && (
