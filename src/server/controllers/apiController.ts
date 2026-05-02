@@ -37,7 +37,10 @@ export const getAuthUrl = (req: Request, res: Response) => {
   try {
     // We need the origin to construct the redirect URI dynamically if APP_URL is not set
     // Strictly use APP_URL to avoid origin/referer mismatch issues
-    const redirectUri = `${env.APP_URL}/api/auth/callback`;
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.headers['x-forwarded-host'] || req.get('host');
+    const appUrl = env.APP_URL || `${protocol}://${host}`;
+    const redirectUri = `${appUrl}/api/auth/callback`;
 
     logger.info(`Generating auth URL with redirectUri: ${redirectUri}, APP_URL: ${env.APP_URL}`);
 
@@ -72,7 +75,10 @@ export const handleAuthCallback = async (req: Request, res: Response) => {
   }
 
   try {
-    const redirectUri = `${env.APP_URL}/api/auth/callback`;
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.headers['x-forwarded-host'] || req.get('host');
+    const appUrl = env.APP_URL || `${protocol}://${host}`;
+    const redirectUri = `${appUrl}/api/auth/callback`;
     
     const client = new OAuth2Client(
       env.GOOGLE_CLIENT_ID,

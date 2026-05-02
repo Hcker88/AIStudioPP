@@ -573,12 +573,10 @@ function DashboardContent() {
   );
 }
 
-import { FinancialDebugger } from './components/debug/FinancialDebugger';
 import { runSimulation } from './lib/qa/userSimulator';
 
-// Expose API Key for hidden debugger
+// Expose simulation tool for QA (but NO API keys)
 if (typeof window !== 'undefined') {
-  (window as any).GEMINI_API_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY;
   (window as any).runSimulation = runSimulation;
 }
 
@@ -587,7 +585,6 @@ export default function App() {
     <ErrorBoundary>
       <StrategyProvider>
         <DashboardContent />
-        <FinancialDebugger />
       </StrategyProvider>
     </ErrorBoundary>
   );
