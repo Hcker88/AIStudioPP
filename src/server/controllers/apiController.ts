@@ -39,10 +39,10 @@ export const getAuthUrl = (req: Request, res: Response) => {
     // Strictly use APP_URL to avoid origin/referer mismatch issues
     const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
     const host = req.headers['x-forwarded-host'] || req.get('host');
-    const appUrl = env.APP_URL || `${protocol}://${host}`;
+    const appUrl = `${protocol}://${host}`;
     const redirectUri = `${appUrl}/api/auth/callback`;
 
-    logger.info(`Generating auth URL with redirectUri: ${redirectUri}, APP_URL: ${env.APP_URL}`);
+    logger.info(`Generating auth URL with redirectUri: ${redirectUri}, appUrl: ${appUrl}`);
 
     // Create a new client instance for each request to ensure the redirect URI is correct
     const client = new OAuth2Client(
@@ -77,7 +77,7 @@ export const handleAuthCallback = async (req: Request, res: Response) => {
   try {
     const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
     const host = req.headers['x-forwarded-host'] || req.get('host');
-    const appUrl = env.APP_URL || `${protocol}://${host}`;
+    const appUrl = `${protocol}://${host}`;
     const redirectUri = `${appUrl}/api/auth/callback`;
     
     const client = new OAuth2Client(
@@ -149,7 +149,22 @@ export const handleAuthCallback = async (req: Request, res: Response) => {
     `);
   } catch (error) {
     logger.error(error, 'Error during auth callback');
-    res.status(500).send('Authentication failed');
+    res.send(`
+      <html>
+        <body style="font-family: sans-serif; padding: 20px;">
+          <h2 style="color: red;">Authentication Failed</h2>
+          <p>We successfully connected to Google, but encountered an error saving your session.</p>
+          <div style="background: #f8f9fa; padding: 15px; border-radius: 4px; font-family: monospace; overflow-wrap: break-word;">
+            ${error instanceof Error ? error.message : String(error)}
+          </div>
+          <p><strong>Troubleshooting:</strong></p>
+          <ul>
+            <li>If you see a Database error (ENOTFOUND, connection refused, or tenant not found), your Postgres/Supabase instance may be paused or offline. Please check your DATABASE_URL in the Settings menu.</li>
+            <li>If you see a redirect_uri_mismatch, ensure your Google Cloud Credentials exactly match the App URL.</li>
+          </ul>
+        </body>
+      </html>
+    `);
   }
 };
 

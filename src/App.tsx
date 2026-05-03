@@ -48,9 +48,7 @@ import { LandingPage } from './components/landing/LandingPage';
 import { OnboardingSection } from './components/onboarding/OnboardingSection';
 import { DashboardSection } from './components/dashboard/DashboardSection';
 
-const AdvisoryChat = lazy(() => import('./components/chat/AdvisoryChat').then(m => ({ default: m.AdvisoryChat })));
 const SecurityPage = lazy(() => import('./routes/security').then(m => ({ default: m.SecurityPage })));
-const ConversationForm = lazy(() => import('./components/onboarding/ConversationForm').then(m => ({ default: m.ConversationForm })));
 
 function DashboardContent() {
   const [step, setStep] = useState(0); // 0: Landing, 1: Interrogation, 2: Dashboard
