@@ -44,13 +44,17 @@ export function LandingPage({
         <p className="max-w-xl text-2xl font-light opacity-80">
           The only AI strategist that uses deterministic math to compare your high-interest debt against market ROI. No hallucinations. Just ROI.
         </p>
-        <div className="flex gap-4">
+        <div className="flex flex-col gap-4">
           <button 
             onClick={onNext}
-            className="bg-[#F27D26] text-black px-8 py-4 font-bold text-lg rounded-lg shadow-lg shadow-orange-500/20 hover:bg-[#FF8C35] transition-all flex items-center gap-2"
+            className="bg-[#F27D26] text-black px-8 py-4 font-bold text-lg rounded-lg shadow-lg shadow-orange-500/20 hover:bg-[#FF8C35] transition-all flex items-center justify-center gap-2"
           >
             BEGIN THE INTERROGATION <ArrowRight className="w-5 h-5" />
           </button>
+          <div className="flex items-center justify-center gap-2 text-xs opacity-60">
+            <ShieldCheck className="w-4 h-4 text-emerald-500" />
+            <span>Your financial data is private, securely stored, and never shared.</span>
+          </div>
         </div>
       </div>
 
