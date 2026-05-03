@@ -19,6 +19,7 @@ router.post('/auth/logout', requireAuth, apiController.logout);
 router.get('/dashboard', requireAuth, apiController.getDashboard);
 router.post('/onboarding', requireAuth, apiController.handleOnboarding);
 router.post('/parse-statement', requireAuth, apiController.parseStatement);
+router.post('/ai/parse', apiController.parseFinancialIntent);
 router.post('/chat', requireAuth, apiController.handleChat);
 router.post('/save-strategy', requireAuth, apiController.saveStrategy);
 router.post('/sync', requireAuth, apiController.syncFinancials);

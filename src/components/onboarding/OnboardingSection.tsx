@@ -1,24 +1,19 @@
 import React, { Suspense } from 'react';
 import { motion } from 'motion/react';
 import { ConversationForm } from '../onboarding/ConversationForm';
+import { useFinance } from '../../contexts/FinanceContext';
+import { applyParsedUpdates, fetchFullProfile, updateUserMetrics } from '../../lib/persistence';
+import { calculateMetrics } from '../../lib/financialEngine';
 
 interface OnboardingSectionProps {
-  user: any;
-  setOnboardingData: (data: any) => void;
-  setIncome: (data: any) => void;
-  setExpenses: (data: any) => void;
-  setLoans: (data: any) => void;
   onComplete: () => void;
 }
 
 export function OnboardingSection({
-  user,
-  setOnboardingData,
-  setIncome,
-  setExpenses,
-  setLoans,
   onComplete
 }: OnboardingSectionProps) {
+  const { user, refreshProfile } = useFinance();
+
   return (
     <>
       <div className="mb-16 text-center">
@@ -29,50 +24,38 @@ export function OnboardingSection({
 
       <Suspense fallback={<div className="flex justify-center p-12"><div className="w-8 h-8 border-4 border-t-[#F27D26] border-white/10 rounded-full animate-spin"></div></div>}>
         <ConversationForm onComplete={async (data) => {
-          console.log('Onboarding Data:', data);
-          setOnboardingData(data);
-          setIncome(data.income);
-          setExpenses(data.expenses);
-          
-          if (data.loans && data.loans.length > 0) {
-            setLoans(data.loans.map((l: any) => ({
-              name: l.name,
-              principal: l.principal,
-              interestRate: l.rate,
-              emi: l.emi,
-              tenure: Math.ceil(l.principal / l.emi) || 60
-            })));
-          } else {
-            setLoans([]);
-          }
-
-          // Wire onboarding data to the backend completely 
-          if (user?.id) {
+          if (user?.uid) {
             try {
-              await fetch('/api/onboarding', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  userId: user.id,
-                  monthlyIncome: data.income,
-                  loans: data.loans ? data.loans.map((l: any) => ({
-                    name: l.name,
-                    principal: l.principal,
-                    interestRate: l.rate,
-                    emi: l.emi,
-                    tenure: Math.ceil(l.principal / l.emi) || 60
-                  })) : [],
-                  expenses: data.detailedExpenses || []
-                })
-              });
+              const updates: any = {};
+              if (data.income) updates.incomes = [{ source: 'Primary', frequency: 'MONTHLY', amount: data.income }];
+              if (data.expenses) updates.expenses = [{ category: 'General', frequency: 'MONTHLY', amount: data.expenses }];
+              if (data.loans && data.loans.length > 0) {
+                updates.loans = data.loans.map((l: any) => ({
+                  name: l.name,
+                  principalAmount: l.principal,
+                  interestRate: l.rate,
+                  monthlyEmi: l.emi,
+                  startDate: new Date().toISOString()
+                }));
+              }
+              
+              await applyParsedUpdates(user.uid, updates);
+              
+              const p = await fetchFullProfile(user.uid);
+              if (p) {
+                 const metrics = calculateMetrics(p);
+                 await updateUserMetrics(user.uid, metrics);
+                 await refreshProfile();
+              }
+
             } catch (err) {
-              console.error("Failed to save onboarding to database", err);
+              console.error("Failed to save onboarding", err);
             }
           }
-
           onComplete();
         }} />
       </Suspense>
     </>
   );
 }
+

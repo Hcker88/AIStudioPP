@@ -158,9 +158,9 @@ export function ConversationForm({ onComplete }: ConversationFormProps) {
   const removeExpense = (index: number) => setExpenses(expenses.filter((_, i) => i !== index));
 
   return (
-    <div className="max-w-4xl mx-auto p-8 lg:p-16 space-y-12 bg-white/5 border border-white/10 rounded-sm backdrop-blur-md">
-      <div className="flex items-center justify-between border-b border-white/10 pb-6">
-        <div className="flex items-center gap-2 text-[#F27D26]">
+    <div className="max-w-4xl mx-auto p-8 lg:p-16 space-y-12 bg-[#111116] border border-white/8 rounded-xl backdrop-blur-md">
+      <div className="flex items-center justify-between border-b border-white/8 pb-6">
+        <div className="flex items-center gap-2 text-[#E8C547]">
           <Sparkles size={16} />
           <span className="text-[10px] font-bold uppercase tracking-widest">Financial Audit • Step 0{step}/03</span>
         </div>
@@ -367,7 +367,7 @@ export function ConversationForm({ onComplete }: ConversationFormProps) {
         </motion.div>
       )}
 
-      <div className="pt-8 border-t border-white/10 flex justify-between items-center">
+      <div className="pt-8 border-t border-white/8 flex justify-between items-center">
         {step > 1 ? (
           <button onClick={() => setStep(step - 1)} className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 opacity-60 hover:opacity-100 transition-opacity">
             <ArrowLeft size={14} /> Back
@@ -377,7 +377,7 @@ export function ConversationForm({ onComplete }: ConversationFormProps) {
         <button 
           onClick={handleNext}
           disabled={isSubmitting}
-          className="bg-[#F27D26] text-black px-8 py-4 font-bold uppercase tracking-widest rounded-sm hover:scale-105 transition-transform flex items-center gap-3 disabled:opacity-50 disabled:hover:scale-100"
+          className="bg-[#F27D26] text-black px-8 py-4 font-bold rounded-lg shadow-lg shadow-orange-500/20 hover:bg-[#FF8C35] transition-all flex items-center gap-3 disabled:opacity-50"
         >
           {isSubmitting ? 'Generating...' : (step === 3 ? 'Generate Strategy' : 'Continue')} 
           {isSubmitting ? <Zap size={18} className="animate-pulse" /> : (step === 3 ? <Zap size={18} /> : <ArrowRight size={18} />)}

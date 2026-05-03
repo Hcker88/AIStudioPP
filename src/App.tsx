@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 import { StatCard } from './components/ui/StatCard';
 import { LoanRow } from './components/ui/LoanRow';
-import { StrategyProvider, useStrategy } from './contexts/StrategyContext';
+import { FinanceProvider, useFinance } from './contexts/FinanceContext';
 import { formatINR } from './lib/formatters';
 import { cn } from './lib/utils';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -57,159 +57,40 @@ function DashboardContent() {
   const [hookDebt, setHookDebt] = useState<number>(1000000);
   const [hookRate, setHookRate] = useState<number>(12);
   const [showConfetti, setShowConfetti] = useState(false);
-  const { extraMonthly, setLastSyncMessage, isPrivacyMode, setIsPrivacyMode, highlightedCard, setFinancialData } = useStrategy();
+  const [isPrivacyMode, setIsPrivacyMode] = useState(false);
   
-  const [isSyncing, setIsSyncing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true); // Start with loading for skeleton
-  const [user, setUser] = useState<any>(null);
+  
+  const { user, profile, loading, login, logout } = useFinance();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  const fetchUser = async (retryCount = 0) => {
-    try {
-      console.log("Fetching user..., attempt:", retryCount + 1);
-      const response = await fetch('/api/auth/me?t=' + Date.now(), {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
-      
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await response.text();
-        if (text.includes("Starting Server") && retryCount < 3) {
-          console.log("Server is starting, retrying fetchUser in 2 seconds...");
-          setTimeout(() => fetchUser(retryCount + 1), 2000);
-          return;
-        }
-        throw new Error(`Server returned an invalid response (not JSON). Status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log("User data received:", data);
-      
-      const user = data.data?.user || data.user;
-      
-      if (user) {
-        setUser(user);
-        // Do not skip to step 2, let them click "Begin Interrogation"
-      } else {
-        console.log("No user found in session.");
-        setUser(null);
-      }
-    } catch (error) {
-      console.error("Failed to fetch user:", error);
-      setUser(null);
-    } finally {
-      setIsLoading(false);
+  useEffect(() => {
+    if (user && profile && step === 0) {
+      setStep(2); // Jump straight to Dashboard if user and profile exist
     }
-  };
+  }, [user, profile, step]);
 
-  const handleLogin = async (retryCount = 0) => {
-    console.log("handleLogin triggered, attempt:", retryCount + 1);
+  const handleLogin = async () => {
     setLoginError(null);
     try {
-      const response = await fetch('/api/auth/url?t=' + Date.now(), {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
-      
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await response.text();
-        console.error("Received non-JSON response:", text.substring(0, 200));
-        
-        if (text.includes("Starting Server") && retryCount < 3) {
-          console.log("Server is starting, retrying in 2 seconds...");
-          setLoginError("Server is waking up, retrying...");
-          setTimeout(() => handleLogin(retryCount + 1), 2000);
-          return;
-        }
-        
-        throw new Error(`Server returned an invalid response (not JSON). Status: ${response.status}`);
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Auth URL fetch failed with status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log("Auth URL response:", data);
-      const url = data.data?.url || data.url;
-      if (!url) {
-        throw new Error(`No URL returned from server. Response: ${JSON.stringify(data)}`);
-      }
-      console.log("Opening auth window with URL:", url);
-      const authWindow = window.open(url, 'oauth_popup', 'width=600,height=700');
-      if (!authWindow) {
-        setLoginError('Please allow popups for this site to connect your account.');
-      }
+      await login();
+      setStep(2);
     } catch (error) {
       console.error("Login failed:", error);
-      setLoginError(error instanceof Error ? error.message : "Login failed. Check console for details.");
+      setLoginError(error instanceof Error ? error.message : "Login failed.");
     }
   };
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      setUser(null);
+      await logout();
       setStep(0);
     } catch (error) {
       console.error("Logout failed:", error);
     }
   };
-
-  useEffect(() => {
-    fetchUser();
-
-    const handleMessage = (event: MessageEvent) => {
-      // Security: Always check origin
-      if (event.origin !== window.location.origin) {
-        return;
-      }
-      
-      console.log("Received message:", event.data);
-      if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
-        console.log("OAuth success message received, fetching user...");
-        if (event.data.user) {
-          console.log("Using user data from postMessage:", event.data.user);
-          setUser(event.data.user);
-          // Do not skip to step 2, let them click "Begin Interrogation"
-          setIsLoading(false);
-        } else {
-          fetchUser();
-        }
-      }
-    };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
-
-  const [loans, setLoans] = useState<any[]>([]);
-  const [income, setIncome] = useState(0);
-  const [expenses, setExpenses] = useState(0);
-
-  useEffect(() => {
-    const totalDebt = loans.reduce((acc, l) => acc + l.principal, 0);
-    setFinancialData({ totalDebt, monthlyIncome: income, expenses });
-  }, [loans, income, expenses, setFinancialData]);
-
-  useEffect(() => {
-    // Simulate initial load for skeleton
-    const timer = setTimeout(() => setIsLoading(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
-
-
-
-
 
   const triggerCelebration = () => {
     const duration = 5 * 1000;
@@ -234,24 +115,6 @@ function DashboardContent() {
 
 
 
-
-  const handleSync = async () => {
-    setIsSyncing(true);
-    try {
-      const response = await fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user?.id || 'default-user' }),
-      });
-      const data = await response.json();
-      setLastSyncMessage(data.message);
-      alert(data.message);
-    } catch (error) {
-      console.error('Sync failed', error);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -292,7 +155,7 @@ function DashboardContent() {
     }
   };
 
-  if (isLoading) return <DashboardSkeleton />;
+  if (loading) return <DashboardSkeleton />;
 
   if (!user && step === 0) {
     return (
@@ -347,14 +210,14 @@ function DashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#E4E3E0] font-sans selection:bg-[#F27D26] selection:text-black">
+    <div className="min-h-screen bg-[#0a0a0f] text-[#E4E3E0] font-sans selection:bg-[#F27D26]/30 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#F27D26]/[0.03] to-[#0a0a0f]">
       
       {/* Sidebar Navigation */}
-      <div className="fixed left-0 top-0 h-full w-20 border-r border-white/10 flex flex-col items-center py-8 gap-8 bg-black/50 backdrop-blur-xl z-50">
-        <div className="w-10 h-10 bg-[#F27D26] rounded-sm flex items-center justify-center mb-4">
+      <div className="fixed left-0 top-0 h-full w-20 border-r border-white/8 flex flex-col items-center py-8 gap-8 bg-black/50 backdrop-blur-xl z-50">
+        <div className="w-10 h-10 bg-[#F27D26] rounded-lg flex items-center justify-center mb-4">
           <TrendingUp className="text-black w-6 h-6" />
         </div>
-        <button className="p-3 text-[#F27D26] bg-[#F27D26]/10 rounded-sm"><LayoutDashboard size={20} /></button>
+        <button className="p-3 text-[#F27D26] bg-[#F27D26]/10 rounded-lg"><LayoutDashboard size={20} /></button>
         <button className="p-3 opacity-40 hover:opacity-100 transition-opacity"><Target size={20} /></button>
         <button className="p-3 opacity-40 hover:opacity-100 transition-opacity"><BarChart3 size={20} /></button>
         <div className="mt-auto">
@@ -364,7 +227,7 @@ function DashboardContent() {
 
       <div className="pl-20">
         {/* Navigation */}
-        <nav className="border-b border-white/10 p-6 flex justify-between items-center bg-black/20 backdrop-blur-md sticky top-0 z-40">
+        <nav className="border-b border-white/8 p-6 flex justify-between items-center bg-black/20 backdrop-blur-md sticky top-0 z-40">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2">
               <span className="font-bold tracking-tighter text-xl uppercase">DEBTSTRATEGIST<span className="text-[#F27D26]">.AI</span></span>
@@ -375,10 +238,10 @@ function DashboardContent() {
             <button 
               onClick={() => setIsPrivacyMode(!isPrivacyMode)}
               className={cn(
-                "px-4 py-2 border rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all",
+                "px-4 py-2 border rounded-md text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all",
                 isPrivacyMode 
                   ? "bg-[#F27D26]/10 border-[#F27D26] text-[#F27D26]" 
-                  : "bg-white/5 border-white/10 hover:bg-white/10"
+                  : "bg-[#18181f] border-white/8 hover:bg-[#1f1f28]"
               )}
             >
               {isPrivacyMode ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -388,7 +251,7 @@ function DashboardContent() {
             <button 
               onClick={handleExport}
               disabled={isExporting}
-              className="px-4 py-2 bg-white/5 border border-white/10 rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-white/10 transition-colors disabled:opacity-50"
+              className="px-4 py-2 bg-[#18181f] border border-white/8 rounded-md text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-[#1f1f28] transition-colors disabled:opacity-50"
             >
               {isExporting ? <RefreshCw className="w-3 h-3 animate-spin" /> : <FileText size={14} />}
               {isExporting ? 'Exporting...' : 'Export Roadmap'}
@@ -397,7 +260,7 @@ function DashboardContent() {
 
             <button 
               onClick={() => setView('SECURITY')}
-              className="px-4 py-2 bg-white/5 border border-white/10 rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-white/10 transition-colors"
+              className="px-4 py-2 bg-[#18181f] border border-white/8 rounded-md text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-[#1f1f28] transition-colors"
             >
               <Shield size={14} className="text-[#F27D26]" />
               Security
@@ -408,7 +271,7 @@ function DashboardContent() {
             {deferredPrompt && (
               <button 
                 onClick={handleInstall}
-                className="px-4 py-2 bg-white/5 border border-white/10 rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-white/10 transition-colors"
+                className="px-4 py-2 bg-[#18181f] border border-white/8 rounded-md text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-[#1f1f28] transition-colors"
               >
                 <Download size={14} className="text-[#F27D26]" />
                 Install App
@@ -419,7 +282,7 @@ function DashboardContent() {
 
             <button 
               onClick={handleLogout}
-              className="px-4 py-2 bg-white/5 border border-white/10 rounded-sm text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-all"
+              className="px-4 py-2 bg-[#18181f] border border-white/8 rounded-md text-[10px] font-bold uppercase tracking-widest hover:bg-[#1f1f28] transition-all"
             >
               LOGOUT
             </button>
@@ -470,11 +333,6 @@ function DashboardContent() {
                     className="max-w-4xl mx-auto py-24"
                   >
                     <OnboardingSection 
-                      user={user}
-                      setOnboardingData={setOnboardingData}
-                      setIncome={setIncome}
-                      setExpenses={setExpenses}
-                      setLoans={setLoans}
                       onComplete={() => setStep(2)}
                     />
                   </motion.section>
@@ -487,16 +345,16 @@ function DashboardContent() {
                     animate={{ opacity: 1 }}
                     className="grid grid-cols-12 gap-8"
                   >
-                    {isLoading ? (
+                    {loading ? (
                       <div className="col-span-12">
                         <DashboardSkeleton />
                       </div>
                     ) : (
                       <DashboardSection 
-                        income={income}
-                        loans={loans}
+                        income={profile?.incomes?.reduce((acc, inc) => acc + inc.amount, 0) || 0}
+                        loans={profile?.loans || []}
                         isPrivacyMode={isPrivacyMode}
-                        highlightedCard={highlightedCard}
+                        highlightedCard={null}
                         user={user}
                         onLoanClose={() => {
                           triggerCelebration();
@@ -581,9 +439,9 @@ if (typeof window !== 'undefined') {
 export default function App() {
   return (
     <ErrorBoundary>
-      <StrategyProvider>
+      <FinanceProvider>
         <DashboardContent />
-      </StrategyProvider>
+      </FinanceProvider>
     </ErrorBoundary>
   );
 }

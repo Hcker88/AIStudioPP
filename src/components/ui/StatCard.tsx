@@ -18,10 +18,10 @@ export function StatCard({ label, value, subtext, isHigh, trend, isPrivacyMode, 
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        "relative p-6 bg-white/5 border rounded-sm transition-all duration-500",
-        isHigh 
+        "relative p-6 bg-[#111116] border rounded-sm transition-all duration-500",
+        isHigh || highlight
           ? "border-[#F27D26] shadow-[0_0_20px_rgba(242,125,38,0.15)]" 
-          : "border-white/10",
+          : "border-white/8",
         highlight && "animate-pulse-glow"
       )}
     >
@@ -38,7 +38,7 @@ export function StatCard({ label, value, subtext, isHigh, trend, isPrivacyMode, 
       </div>
       
       <div className={cn("flex items-baseline gap-1 transition-all duration-300", isPrivacyMode && "blur-md select-none")}>
-        <span className="text-4xl font-bold tracking-tighter">{value}</span>
+        <span className="text-4xl font-bold tracking-tighter tabular-nums">{value}</span>
         {label.toLowerCase().includes('rate') && <span className="text-lg opacity-30">%</span>}
       </div>
 
@@ -48,8 +48,8 @@ export function StatCard({ label, value, subtext, isHigh, trend, isPrivacyMode, 
         </p>
       )}
 
-      {isHigh && (
-        <div className="absolute -top-px -left-px w-4 h-4 border-t border-l border-[#F27D26]" />
+      {(isHigh || highlight) && (
+        <div className="absolute top-0 left-0 bottom-0 w-0.5 bg-[#F27D26]" />
       )}
     </motion.div>
   );

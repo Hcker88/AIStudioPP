@@ -1,53 +1,25 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageSquare, Send, Sparkles, ArrowRight, ShieldCheck, Bookmark, ShoppingCart, X } from 'lucide-react';
+import { MessageSquare, Send, ShieldCheck } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { useStrategy } from '../../contexts/StrategyContext';
+import { useFinance } from '../../contexts/FinanceContext';
 import { formatINR } from '../../lib/formatters';
-
-interface ActionCard {
-  title: string;
-  targetId: string;
-  reason: string;
-  impact: string;
-  riskWarning?: string;
-}
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  actions?: ActionCard[];
 }
 
-interface AdvisoryChatProps {
-  highestLoanName?: string;
-  highestLoanRate?: number;
-  user?: any;
-}
+export function AdvisoryChat() {
+  const { profile, processChatMessage } = useFinance();
+  const highestLoan = profile?.loans?.length ? profile.loans.reduce((prev, current) => (prev.interestRate > current.interestRate) ? prev : current) : null;
+  const highestLoanName = highestLoan ? highestLoan.name : "Debt Free";
+  const highestLoanRate = highestLoan ? highestLoan.interestRate : 0;
 
-export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99, user }: AdvisoryChatProps) {
-  const { extraMonthly, lastSyncMessage, setHighlightedCard, financialData } = useStrategy();
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: `I've analyzed your profile. Your ${highestLoanName} at ${highestLoanRate}% is the primary target. How can I help you optimize your ROI today?` }
+    { role: 'assistant', content: `I'm analyzing your real-time financial data. Your ${highestLoanName} at ${highestLoanRate}% is the primary target. You can tell me about new income, expenses, or investments here.` }
   ]);
 
-  // Acknowledge context changes
-  useEffect(() => {
-    if (extraMonthly > 25000) {
-      const msg: Message = { 
-        role: 'assistant', 
-        content: `I see you're considering an extra ₹${formatINR(extraMonthly)}/mo contribution. This significantly accelerates your debt-free date. Would you like to see the updated projection?` 
-      };
-      setMessages(prev => [...prev, msg]);
-    }
-  }, [extraMonthly]);
-
-  useEffect(() => {
-    if (lastSyncMessage) {
-      const msg: Message = { role: 'assistant', content: lastSyncMessage };
-      setMessages(prev => [...prev, msg]);
-    }
-  }, [lastSyncMessage]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -67,45 +39,8 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
     setIsTyping(true);
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userId: user?.id || 'default-user',
-          message: text,
-          financialData
-        }),
-      });
-
-      if (!response.ok) throw new Error('Chat failed');
-
-      const data = await response.json();
-      let rawText = data.response;
-      let parsedMsg = "";
-      let parsedActions: ActionCard[] = [];
-
-      try {
-        const parsed = JSON.parse(rawText);
-        parsedMsg = parsed.message || parsed.content || "Strategy Updated.";
-        parsedActions = parsed.actions || [];
-      } catch (e) {
-        parsedMsg = rawText; // Fallback to raw text if not valid JSON
-      }
-      
-      // Handle legacy strategy highlighting
-      const highlightMatch = parsedMsg.match(/\[HIGHLIGHT:(.*?)\]/);
-      if (highlightMatch) {
-        setHighlightedCard(highlightMatch[1]);
-        // Clear highlight after 5 seconds
-        setTimeout(() => setHighlightedCard(null), 5000);
-      }
-
-      const assistantMsg: Message = { 
-        role: 'assistant', 
-        content: parsedMsg.replace(/\[HIGHLIGHT:.*?\]/g, '').trim(),
-        actions: parsedActions
-      };
-      setMessages(prev => [...prev, assistantMsg]);
+      const responseText = await processChatMessage(text);
+      setMessages(prev => [...prev, { role: 'assistant', content: responseText }]);
     } catch (error) {
       console.error('Chat error:', error);
       setMessages(prev => [...prev, { role: 'assistant', content: 'I encountered an error processing your request. Please try again.' }]);
@@ -121,9 +56,9 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
   ];
 
   return (
-    <div className="flex flex-col h-full bg-white/5 border border-white/10 rounded-sm overflow-hidden backdrop-blur-md relative">
+    <div className="flex flex-col h-full bg-[#18181f] border border-white/8 rounded-xl overflow-hidden backdrop-blur-md relative">
       {/* Header */}
-      <div className="p-4 border-b border-white/10 flex items-center justify-between bg-black/20">
+      <div className="p-4 border-b border-white/8 flex items-center justify-between bg-black/20">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-[#F27D26]" />
           <span className="text-xs font-bold uppercase tracking-widest">AI Advisory Mode</span>
@@ -150,10 +85,10 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
               )}
             >
               <div className={cn(
-                "max-w-[85%] p-3 rounded-sm text-sm leading-relaxed",
+                "max-w-[85%] p-3 rounded-lg text-sm leading-relaxed",
                 msg.role === 'user' 
-                  ? "bg-[#F27D26] text-black font-medium" 
-                  : "bg-white/10 border border-white/5 backdrop-blur-sm"
+                  ? "bg-[#F27D26] text-black font-medium border border-[#F27D26]/20" 
+                  : "bg-[#111116] border border-white/8 backdrop-blur-sm shadow-md"
               )}>
                 {msg.content.split('\n').map((line, j) => (
                   <p key={j} className={cn(line.startsWith('[Verified') ? "mt-3 pt-3 border-t border-white/10 font-mono text-[10px] opacity-60" : "")}>
@@ -161,23 +96,6 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
                   </p>
                 ))}
               </div>
-
-              {msg.actions && msg.actions.length > 0 && (
-                <div className="flex flex-col gap-2 mt-2 w-[85%]">
-                  {msg.actions.map((act, idx) => (
-                    <div key={idx} className="bg-black/40 border border-[#F27D26]/30 p-3 rounded-sm text-sm relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 p-1 bg-[#F27D26]/20 text-[10px] font-bold text-[#F27D26] uppercase tracking-widest">Action</div>
-                      <h4 className="font-bold text-white mb-1 pr-12">{act.title}</h4>
-                      <p className="opacity-70 text-xs mb-2">{act.reason}</p>
-                      <div className="flex justify-between items-center mt-2">
-                        <span className="text-[10px] uppercase tracking-widest text-[#F27D26]">{act.impact}</span>
-                        <button className="text-[10px] bg-white text-black px-2 py-1 font-bold uppercase hover:bg-[#F27D26] transition-colors rounded-sm">Accept Play</button>
-                      </div>
-                      {act.riskWarning && <p className="text-[10px] text-red-400 opacity-80 mt-2 border-t border-red-400/20 pt-1">Risk: {act.riskWarning}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
             </motion.div>
           ))}
           {isTyping && (
@@ -195,13 +113,13 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-white/10 bg-black/20">
+      <div className="p-4 border-t border-white/8 bg-black/20">
         <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
           {suggestions.map((s, i) => (
             <button 
               key={i}
               onClick={() => handleSend(s)}
-              className="whitespace-nowrap px-3 py-1.5 bg-white/5 border border-white/10 rounded-full text-[10px] font-medium hover:bg-white/10 hover:border-[#F27D26]/50 transition-all"
+              className="whitespace-nowrap px-3 py-1.5 bg-[#111116] border border-white/8 rounded-md text-[11px] font-medium hover:bg-[#1f1f28] hover:border-[#F27D26]/50 transition-all font-mono"
             >
               {s}
             </button>
@@ -215,11 +133,11 @@ export function AdvisoryChat({ highestLoanName = "Amex", highestLoanRate = 24.99
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Ask about an investment..."
-            className="w-full bg-transparent border-b border-white/20 py-2 pr-10 focus:outline-none focus:border-[#F27D26] text-sm transition-colors placeholder:opacity-30"
+            className="w-full bg-white/4 border border-white/10 rounded-md px-4 py-3 pr-10 focus:outline-none focus:border-[#F27D26] focus:ring-1 focus:ring-[#F27D26]/30 text-sm transition-colors placeholder:opacity-30"
           />
           <button 
             onClick={() => handleSend()}
-            className="absolute right-0 top-1.5 p-1 hover:text-[#F27D26] transition-colors"
+            className="absolute right-2 top-2.5 p-1 hover:text-[#F27D26] transition-colors"
           >
             <Send className="w-4 h-4" />
           </button>

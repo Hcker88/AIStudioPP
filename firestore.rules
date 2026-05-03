@@ -1,0 +1,228 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitive Definition
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    function incoming() { 
+      return request.resource.data; 
+    }
+    function existing() { 
+      return resource.data; 
+    }
+    function isSignedIn() { 
+      return request.auth != null && request.auth.token.email_verified == true; 
+    }
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Validation Blueprint - UserProfile
+    function isValidUserProfile(data, isCreate) {
+      let hasRequired = isCreate ? data.keys().hasAll(['userId', 'email', 'createdAt', 'updatedAt']) : true;
+      let validUserId = data.userId == request.auth.uid;
+      let validEmail = data.email is string && data.email.size() <= 256;
+      let validName = !('name' in data) || (data.name is string && data.name.size() <= 100);
+      let validAge = !('age' in data) || (data.age is number && data.age >= 0 && data.age <= 150);
+      let validOccupation = !('occupation' in data) || (data.occupation is string && data.occupation.size() <= 100);
+      let validRiskProfile = !('riskProfile' in data) || (data.riskProfile in ["CONSERVATIVE", "MODERATE", "AGGRESSIVE"]);
+      let validMetrics = !('metrics' in data) || (
+        data.metrics is map &&
+        (!('netWorth' in data.metrics) || data.metrics.netWorth is number) &&
+        (!('monthlyCashFlow' in data.metrics) || data.metrics.monthlyCashFlow is number) &&
+        (!('savingsRate' in data.metrics) || data.metrics.savingsRate is number) &&
+        (!('debtToIncomeRatio' in data.metrics) || data.metrics.debtToIncomeRatio is number) &&
+        (!('financialHealthScore' in data.metrics) || data.metrics.financialHealthScore is number)
+      );
+      let validCreatedAt = isCreate ? data.createdAt == request.time : true;
+      let validUpdatedAt = data.updatedAt == request.time;
+      
+      return hasRequired && validUserId && validEmail && validName && validAge && validOccupation && validRiskProfile && validMetrics && validCreatedAt && validUpdatedAt;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+
+      allow create: if isOwner(userId) 
+        && isValidId(userId) 
+        && isValidUserProfile(incoming(), true)
+        && incoming().keys().size() <= 9;
+
+      allow update: if isOwner(userId)
+        && isValidUserProfile(incoming(), false)
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'age', 'occupation', 'riskProfile', 'metrics', 'updatedAt']);
+        
+      // Income
+      match /incomes/{incomeId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow delete: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        function isValidIncome(data, isCreate) {
+          return (isCreate ? data.keys().hasAll(['userId', 'source', 'amount', 'frequency', 'createdAt', 'updatedAt']) : true)
+            && data.userId == request.auth.uid
+            && data.source is string && data.source.size() <= 100
+            && data.amount is number
+            && data.frequency in ["MONTHLY", "YEARLY", "ONE_TIME"]
+            && (isCreate ? data.createdAt == request.time : true)
+            && data.updatedAt == request.time;
+        }
+
+        allow create: if isOwner(userId) && isValidId(incomeId) && isValidIncome(incoming(), true) && incoming().keys().size() == 6;
+        allow update: if isOwner(userId) && isValidIncome(incoming(), false) && incoming().userId == existing().userId && incoming().createdAt == existing().createdAt && incoming().diff(existing()).affectedKeys().hasOnly(['source', 'amount', 'frequency', 'updatedAt']);
+      }
+
+      // Expense
+      match /expenses/{expenseId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow delete: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        function isValidExpense(data, isCreate) {
+           return (isCreate ? data.keys().hasAll(['userId', 'category', 'amount', 'isFixed', 'createdAt', 'updatedAt']) : true)
+            && data.userId == request.auth.uid
+            && data.category is string && data.category.size() <= 100
+            && data.amount is number
+            && data.isFixed is bool
+            && (isCreate ? data.createdAt == request.time : true)
+            && data.updatedAt == request.time;
+        }
+
+        allow create: if isOwner(userId) && isValidId(expenseId) && isValidExpense(incoming(), true) && incoming().keys().size() == 6;
+        allow update: if isOwner(userId) && isValidExpense(incoming(), false) && incoming().userId == existing().userId && incoming().createdAt == existing().createdAt && incoming().diff(existing()).affectedKeys().hasOnly(['category', 'amount', 'isFixed', 'updatedAt']);
+      }
+
+      // Loan
+      match /loans/{loanId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow delete: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        function isValidLoan(data, isCreate) {
+           return (isCreate ? data.keys().hasAll(['userId', 'name', 'principalAmount', 'interestRate', 'monthlyEmi', 'createdAt', 'updatedAt']) : true)
+            && data.userId == request.auth.uid
+            && data.name is string && data.name.size() <= 100
+            && data.principalAmount is number
+            && data.interestRate is number
+            && data.monthlyEmi is number
+            && (isCreate ? data.createdAt == request.time : true)
+            && data.updatedAt == request.time;
+        }
+
+        allow create: if isOwner(userId) && isValidId(loanId) && isValidLoan(incoming(), true) && incoming().keys().size() == 7;
+        allow update: if isOwner(userId) && isValidLoan(incoming(), false) && incoming().userId == existing().userId && incoming().createdAt == existing().createdAt && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'principalAmount', 'interestRate', 'monthlyEmi', 'updatedAt']);
+      }
+
+      // Asset
+      match /assets/{assetId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow delete: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        function isValidAsset(data, isCreate) {
+           return (isCreate ? data.keys().hasAll(['userId', 'name', 'value', 'createdAt', 'updatedAt']) : true)
+            && data.userId == request.auth.uid
+            && data.name is string && data.name.size() <= 100
+            && data.value is number
+            && (isCreate ? data.createdAt == request.time : true)
+            && data.updatedAt == request.time;
+        }
+
+        allow create: if isOwner(userId) && isValidId(assetId) && isValidAsset(incoming(), true) && incoming().keys().size() == 5;
+        allow update: if isOwner(userId) && isValidAsset(incoming(), false) && incoming().userId == existing().userId && incoming().createdAt == existing().createdAt && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'value', 'updatedAt']);
+      }
+
+      // Subscription
+      match /subscriptions/{subscriptionId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow delete: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        function isValidSubscription(data, isCreate) {
+           return (isCreate ? data.keys().hasAll(['userId', 'name', 'amount', 'cycle', 'createdAt', 'updatedAt']) : true)
+            && data.userId == request.auth.uid
+            && data.name is string && data.name.size() <= 100
+            && data.amount is number
+            && data.cycle in ["MONTHLY", "YEARLY"]
+            && (isCreate ? data.createdAt == request.time : true)
+            && data.updatedAt == request.time;
+        }
+
+        allow create: if isOwner(userId) && isValidId(subscriptionId) && isValidSubscription(incoming(), true) && incoming().keys().size() == 6;
+        allow update: if isOwner(userId) && isValidSubscription(incoming(), false) && incoming().userId == existing().userId && incoming().createdAt == existing().createdAt && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'amount', 'cycle', 'updatedAt']);
+      }
+
+      // InvestmentHolding
+      match /holdings/{holdingId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow delete: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        function isValidHolding(data, isCreate) {
+           return (isCreate ? data.keys().hasAll(['userId', 'symbol', 'assetName', 'assetType', 'quantity', 'buyPrice', 'currentPrice', 'createdAt', 'updatedAt']) : true)
+            && data.userId == request.auth.uid
+            && data.symbol is string && data.symbol.size() <= 20
+            && data.assetName is string && data.assetName.size() <= 100
+            && data.assetType is string && data.assetType.size() <= 50
+            && data.quantity is number
+            && data.buyPrice is number
+            && data.currentPrice is number
+            && (isCreate ? data.createdAt == request.time : true)
+            && data.updatedAt == request.time;
+        }
+
+        allow create: if isOwner(userId) && isValidId(holdingId) && isValidHolding(incoming(), true) && incoming().keys().size() == 9;
+        allow update: if isOwner(userId) && isValidHolding(incoming(), false) && incoming().userId == existing().userId && incoming().createdAt == existing().createdAt && incoming().diff(existing()).affectedKeys().hasOnly(['symbol', 'assetName', 'assetType', 'quantity', 'buyPrice', 'currentPrice', 'updatedAt']);
+      }
+
+      // FinancialGoal
+      match /goals/{goalId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow delete: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        function isValidGoal(data, isCreate) {
+           return (isCreate ? data.keys().hasAll(['userId', 'name', 'targetAmount', 'currentSavings', 'targetDate', 'createdAt', 'updatedAt']) : true)
+            && data.userId == request.auth.uid
+            && data.name is string && data.name.size() <= 100
+            && data.targetAmount is number
+            && data.currentSavings is number
+            && data.targetDate is string && data.targetDate.size() <= 50
+            && (isCreate ? data.createdAt == request.time : true)
+            && data.updatedAt == request.time;
+        }
+
+        allow create: if isOwner(userId) && isValidId(goalId) && isValidGoal(incoming(), true) && incoming().keys().size() == 7;
+        allow update: if isOwner(userId) && isValidGoal(incoming(), false) && incoming().userId == existing().userId && incoming().createdAt == existing().createdAt && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'targetAmount', 'currentSavings', 'targetDate', 'updatedAt']);
+      }
+
+      // Insight
+      match /insights/{insightId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow delete: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        function isValidInsight(data, isCreate) {
+           return (isCreate ? data.keys().hasAll(['userId', 'content', 'priority', 'createdAt', 'updatedAt']) : true)
+            && data.userId == request.auth.uid
+            && data.content is string && data.content.size() <= 1000
+            && data.priority is string && data.priority.size() <= 20
+            && (isCreate ? data.createdAt == request.time : true)
+            && data.updatedAt == request.time;
+        }
+
+        allow create: if isOwner(userId) && isValidId(insightId) && isValidInsight(incoming(), true) && incoming().keys().size() == 5;
+        allow update: if isOwner(userId) && isValidInsight(incoming(), false) && incoming().userId == existing().userId && incoming().createdAt == existing().createdAt && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'priority', 'updatedAt']);
+      }
+    }
+  }
+}

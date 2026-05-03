@@ -17,7 +17,7 @@ export function Skeleton({ className }: SkeletonProps) {
       initial={{ opacity: 0.5 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.8, repeat: Infinity, repeatType: 'reverse' }}
-      className={cn("bg-white/5 rounded-sm", className)}
+      className={cn("bg-[#18181f] rounded-lg", className)}
     />
   );
 }

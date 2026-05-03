@@ -1,0 +1,183 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "The root document for a user's financial profile.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "age": { "type": "number" },
+        "occupation": { "type": "string" },
+        "riskProfile": { "type": "string", "enum": ["CONSERVATIVE", "MODERATE", "AGGRESSIVE"] },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "netWorth": { "type": "number" },
+            "monthlyCashFlow": { "type": "number" },
+            "savingsRate": { "type": "number" },
+            "debtToIncomeRatio": { "type": "number" },
+            "financialHealthScore": { "type": "number" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email", "createdAt", "updatedAt"]
+    },
+    "Income": {
+      "title": "Income Source",
+      "description": "An income source for the user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "source": { "type": "string" },
+        "amount": { "type": "number" },
+        "frequency": { "type": "string", "enum": ["MONTHLY", "YEARLY", "ONE_TIME"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "source", "amount", "frequency", "createdAt", "updatedAt"]
+    },
+    "Expense": {
+      "title": "Expense Record",
+      "description": "An expense record for the user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "isFixed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "category", "amount", "isFixed", "createdAt", "updatedAt"]
+    },
+    "Loan": {
+      "title": "Loan",
+      "description": "A loan or debt of the user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "principalAmount": { "type": "number" },
+        "interestRate": { "type": "number" },
+        "monthlyEmi": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "principalAmount", "interestRate", "monthlyEmi", "createdAt", "updatedAt"]
+    },
+    "Asset": {
+      "title": "Asset",
+      "description": "A non-portfolio asset like gold, real estate.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "value": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "value", "createdAt", "updatedAt"]
+    },
+    "Subscription": {
+      "title": "Subscription",
+      "description": "A recurring subscription.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "amount": { "type": "number" },
+        "cycle": { "type": "string", "enum": ["MONTHLY", "YEARLY"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "amount", "cycle", "createdAt", "updatedAt"]
+    },
+    "InvestmentHolding": {
+      "title": "Investment Holding",
+      "description": "A portfolio investment holding.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "symbol": { "type": "string" },
+        "assetName": { "type": "string" },
+        "assetType": { "type": "string" },
+        "quantity": { "type": "number" },
+        "buyPrice": { "type": "number" },
+        "currentPrice": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "symbol", "assetName", "assetType", "quantity", "buyPrice", "currentPrice", "createdAt", "updatedAt"]
+    },
+    "FinancialGoal": {
+      "title": "Financial Goal",
+      "description": "A targeted financial goal.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "targetAmount": { "type": "number" },
+        "currentSavings": { "type": "number" },
+        "targetDate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "targetAmount", "currentSavings", "targetDate", "createdAt", "updatedAt"]
+    },
+    "Insight": {
+      "title": "Insight",
+      "description": "A personalized insight.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "content": { "type": "string" },
+        "priority": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "content", "priority", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "UserProfile" },
+      "description": "Contains user core details and financial metrics."
+    },
+    "users/{userId}/incomes/{incomeId}": {
+      "schema": { "$ref": "Income" },
+      "description": "User's income sources."
+    },
+    "users/{userId}/expenses/{expenseId}": {
+      "schema": { "$ref": "Expense" },
+      "description": "User's expenses."
+    },
+    "users/{userId}/loans/{loanId}": {
+      "schema": { "$ref": "Loan" },
+      "description": "User's loans."
+    },
+    "users/{userId}/assets/{assetId}": {
+      "schema": { "$ref": "Asset" },
+      "description": "User's assets."
+    },
+    "users/{userId}/subscriptions/{subscriptionId}": {
+      "schema": { "$ref": "Subscription" },
+      "description": "User's subscriptions."
+    },
+    "users/{userId}/holdings/{holdingId}": {
+      "schema": { "$ref": "InvestmentHolding" },
+      "description": "User's portfolio holdings."
+    },
+    "users/{userId}/goals/{goalId}": {
+      "schema": { "$ref": "FinancialGoal" },
+      "description": "User's financial goals."
+    },
+    "users/{userId}/insights/{insightId}": {
+      "schema": { "$ref": "Insight" },
+      "description": "Insights generated for the user."
+    }
+  }
+}

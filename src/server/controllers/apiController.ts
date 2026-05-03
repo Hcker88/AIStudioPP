@@ -273,3 +273,19 @@ export const exportRoadmap = async (req: Request, res: Response) => {
   }
 };
 
+import { parseFinancialInput } from '../../lib/parser.ts';
+
+export const parseFinancialIntent = async (req: Request, res: Response) => {
+  try {
+    const { message, profileContext } = req.body;
+    if (!message) {
+      return res.status(400).json({ success: false, error: 'Message is required' });
+    }
+    const result = await parseFinancialInput(message, profileContext || {});
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error(error, 'Parser error');
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+};
+
