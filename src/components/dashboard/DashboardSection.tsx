@@ -9,6 +9,7 @@ import { InsightsList } from './InsightsList';
 import { PortfolioCard } from './PortfolioCard';
 import { GoalsCard } from './GoalsCard';
 import { useFinance } from '../../contexts/FinanceContext';
+import { getNextBestAction } from '../../lib/advisor';
 
 interface DashboardSectionProps {
   income: number;
@@ -87,10 +88,7 @@ export function DashboardSection({
             </span>
             <h2 className="text-3xl font-bold tracking-tight mt-2 text-white">Your Best Next Move</h2>
             <p className="mt-4 text-white/80 max-w-2xl text-lg font-light">
-              {loans.length > 0 
-                ? `Based on your connected accounts, your objective for this month is to prepay an extra on the ${loans.reduce((prev, current) => ((prev.interestRate || 0) > (current.interestRate || 0)) ? prev : current).name}. `
-                : "Looking good! You are debt-free. It's time to build wealth."
-              }
+              {profile ? getNextBestAction(profile) : "Looking good! You are debt-free. It's time to build wealth."}
             </p>
             {loans.length > 0 && (
               <div className="mt-6 flex gap-4">

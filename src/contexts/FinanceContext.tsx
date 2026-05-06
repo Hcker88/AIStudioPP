@@ -5,6 +5,8 @@ import { fetchFullProfile, applyParsedUpdates, createFullProfile, saveInsights, 
 import { FullProfile, Insight } from '../lib/types.ts';
 import { calculateMetrics } from '../lib/financialEngine.ts';
 import { generateInsights } from '../lib/insightsEngine.ts';
+import { parseMessage } from '../lib/localParser.ts';
+import { getNextBestAction } from '../lib/advisor.ts';
 
 interface FinanceContextType {
   user: any;
@@ -64,44 +66,46 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const processChatMessage = async (message: string): Promise<string> => {
     if (!user || !profile) return "Please login first.";
 
-    // 1. Send to generic parser
-    const res = await fetch('/api/ai/parse', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, profileContext: profile })
-    });
+    // 1. Parse input
+    const extractedEntities = parseMessage(message, profile);
     
-    if (!res.ok) return "Sorry, my financial engines are down. Please try again later.";
+    // Check if any updates exist
+    const hasUpdates = Object.values(extractedEntities).some((arr: any) => arr && arr.length > 0);
 
-    const { data } = await res.json();
-    
-    if (data && data.extractedEntities && Object.keys(data.extractedEntities).length > 0) {
-      // 2. Persist extracted objects
-      await applyParsedUpdates(user.uid, data.extractedEntities);
+    if (hasUpdates) {
+      // 2. Persist 
+      await applyParsedUpdates(user.uid, extractedEntities);
       
-      // Re-fetch active profile 
+      // Re-fetch active profile to get fresh data including past data
       const updatedProfile = await fetchFullProfile(user.uid);
       if (updatedProfile) {
-        // 3. Recalculate metrics
         const metrics = calculateMetrics(updatedProfile);
-        
-        // Update user metrics in DB
         await updateUserMetrics(user.uid, metrics);
         updatedProfile.user.metrics = metrics;
 
-        // 4. Generate Insights
+        // 3. Generate Insights
         const insights = generateInsights(updatedProfile);
         await saveInsights(user.uid, insights);
         updatedProfile.insights = insights;
 
         setProfile(updatedProfile);
 
-        // 5. Contextual response
-        return `I've updated your financial profile! Your new Net Worth is ₹${metrics.netWorth.toLocaleString('en-IN')}, and I have generated ${insights.length} new insights for you. Check your dashboard!`;
+        // 4. Killer Feature: Next Best Action
+        const action = getNextBestAction(updatedProfile);
+        
+        // Format response exactly as requested
+        const insightMessages = insights.map(i => i.content);
+        return insightMessages.join(" ") + "\n\nNext Step: " + action;
       }
+    } else {
+      // Return insight and action even if no new items added
+      const insights = generateInsights(profile);
+      const action = getNextBestAction(profile);
+      const insightMessages = insights.map(i => i.content);
+      return insightMessages.join(" ") + "\n\nNext Step: " + action;
     }
 
-    return "I couldn't detect any specific financial updates in that message, but I'll keep it in mind!";
+    return "I couldn't process your financial updates. Please try again.";
   };
 
   return (
