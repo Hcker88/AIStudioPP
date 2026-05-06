@@ -1,5 +1,5 @@
 {
-  "name": "DebtStrategist AI",
-  "description": "AI-powered financial strategist comparing debt payoff vs. investment ROI with deterministic math and legal guardrails.",
+  "name": "PapaProfit",
+  "description": "Production-level conversational financial management app that intelligently tracks profiles, calculates metrics, and provides personalized next best actions.",
   "requestFramePermissions": []
 }
