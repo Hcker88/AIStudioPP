@@ -16,8 +16,22 @@ export function AdvisoryChat() {
   const highestLoanName = highestLoan ? `Loan (₹${highestLoan.toLocaleString('en-IN')})` : "Debt Free";
   const highestLoanRate = highestLoan ? 15 : 0; // Using a default 15% rate since we only have principal
 
+  const msIn7Days = 7 * 24 * 60 * 60 * 1000;
+  const isStale = profile?.lastUpdated ? (Date.now() - profile.lastUpdated) > msIn7Days : false;
+
+  const getInitialMessage = () => {
+    let msg = `I'm analyzing your real-time financial data. `;
+    if (highestLoan) msg += `Your ${highestLoanName} at ${highestLoanRate}% is the primary target. `;
+    if (isStale) {
+      msg += `It's been a while since your last update. Any recent income or expense changes?`;
+    } else {
+      msg += `You can tell me about new income, expenses, or investments here.`;
+    }
+    return msg;
+  };
+
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: `I'm analyzing your real-time financial data. Your ${highestLoanName} at ${highestLoanRate}% is the primary target. You can tell me about new income, expenses, or investments here.` }
+    { role: 'assistant', content: getInitialMessage() }
   ]);
 
   const [input, setInput] = useState('');
