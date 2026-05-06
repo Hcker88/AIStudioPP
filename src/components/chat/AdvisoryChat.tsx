@@ -12,9 +12,9 @@ interface Message {
 
 export function AdvisoryChat() {
   const { profile, processChatMessage } = useFinance();
-  const highestLoan = profile?.loans?.length ? profile.loans.reduce((prev, current) => (prev.interestRate > current.interestRate) ? prev : current) : null;
-  const highestLoanName = highestLoan ? highestLoan.name : "Debt Free";
-  const highestLoanRate = highestLoan ? highestLoan.interestRate : 0;
+  const highestLoan = profile?.loans?.length ? Math.max(...profile.loans) : null;
+  const highestLoanName = highestLoan ? `Loan (₹${highestLoan.toLocaleString('en-IN')})` : "Debt Free";
+  const highestLoanRate = highestLoan ? 15 : 0; // Using a default 15% rate since we only have principal
 
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: `I'm analyzing your real-time financial data. Your ${highestLoanName} at ${highestLoanRate}% is the primary target. You can tell me about new income, expenses, or investments here.` }

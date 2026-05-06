@@ -273,7 +273,7 @@ export const exportRoadmap = async (req: Request, res: Response) => {
   }
 };
 
-import { parseFinancialInput } from '../../lib/parser.ts';
+import { parseMessage } from '../../lib/parser';
 
 export const parseFinancialIntent = async (req: Request, res: Response) => {
   try {
@@ -281,7 +281,7 @@ export const parseFinancialIntent = async (req: Request, res: Response) => {
     if (!message) {
       return res.status(400).json({ success: false, error: 'Message is required' });
     }
-    const result = await parseFinancialInput(message, profileContext || {});
+    const result = await parseMessage(message, profileContext || {});
     res.json({ success: true, data: result });
   } catch (error) {
     logger.error(error, 'Parser error');
