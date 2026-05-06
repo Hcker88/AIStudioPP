@@ -48,8 +48,6 @@ import { LandingPage } from './components/landing/LandingPage';
 import { OnboardingSection } from './components/onboarding/OnboardingSection';
 import { DashboardSection } from './components/dashboard/DashboardSection';
 
-const SecurityPage = lazy(() => import('./routes/security').then(m => ({ default: m.SecurityPage })));
-
 function DashboardContent() {
   const [step, setStep] = useState(0); // 0: Landing, 1: Interrogation, 2: Dashboard
   const [view, setView] = useState<'APP' | 'SECURITY' | 'LEADERBOARD'>('APP');
@@ -291,17 +289,6 @@ function DashboardContent() {
 
         <main className="max-w-[1600px] mx-auto px-8 py-12">
           <AnimatePresence mode="wait">
-            {view === 'SECURITY' && (
-              <motion.div key="security" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <button onClick={() => setView('APP')} className="mb-8 text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:text-[#F27D26]">
-                  <ArrowRight className="rotate-180" size={14} /> Back to App
-                </button>
-                <Suspense fallback={<div className="flex justify-center p-12"><div className="w-8 h-8 border-4 border-t-[#F27D26] border-white/10 rounded-full animate-spin"></div></div>}>
-                  <SecurityPage />
-                </Suspense>
-              </motion.div>
-            )}
-
             {view === 'APP' && (
               <>
                 {step === 0 && (
@@ -427,13 +414,6 @@ function DashboardContent() {
 
     </div>
   );
-}
-
-import { runSimulation } from './lib/qa/userSimulator';
-
-// Expose simulation tool for QA (but NO API keys)
-if (typeof window !== 'undefined') {
-  (window as any).runSimulation = runSimulation;
 }
 
 export default function App() {

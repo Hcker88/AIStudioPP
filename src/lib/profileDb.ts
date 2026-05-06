@@ -73,8 +73,8 @@ export async function saveUserProfile(userId: string, profile: UserProfileSchema
     profileToSave.history = [...(profileToSave.history || [])];
     profileToSave.history.push({ snapshot, timestamp: Date.now() });
 
-    if (profileToSave.history.length > 20) {
-      profileToSave.history = profileToSave.history.slice(profileToSave.history.length - 20);
+    if (profileToSave.history.length > 15) {
+      profileToSave.history = profileToSave.history.slice(profileToSave.history.length - 15);
     }
     
     profileToSave.lastUpdated = Date.now();

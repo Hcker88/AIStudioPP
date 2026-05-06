@@ -47,6 +47,10 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
+      match /profile/current {
+        allow read, write: if isOwner(userId);
+      }
+      
       allow get: if isOwner(userId);
       allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
 

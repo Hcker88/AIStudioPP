@@ -3,27 +3,23 @@ import { calculateSavingsRate, calculateDebtRatio, calculateFHS } from "./financ
 
 export function getNextBestAction(profile: UserProfileSchema): string {
   const savingsRate = calculateSavingsRate(profile);
-  const debtRatio = calculateDebtRatio(profile);
-  const fhs = calculateFHS(profile);
 
-  // PRIORITY-BASED DECISION
-
-  if (debtRatio > 0.6) {
-    return "Priority: Reduce high-interest debt before increasing investments.";
+  // 1. Debt Priority
+  if (profile.loans && profile.loans.length > 0) {
+    return "Priority Action: Dedicate your surplus cash strictly toward paying off your highest-interest debt.";
   }
 
+  // 2. Savings Priority
   if (savingsRate < 0.2) {
-    return "Increase your monthly savings. Even a 10% adjustment will significantly improve your trajectory.";
+    return "Priority Action: Cut non-essential spending to increase your savings rate to at least 20%.";
   }
 
+  // 3. Investment Priority
   if (!profile.assets.stocks || profile.assets.stocks.length === 0) {
-    return "You currently have no growth assets. Consider allocating a portion into equities.";
+    return "Priority Action: Begin allocating your surplus into market-oriented equity assets for compound growth.";
   }
 
-  if (fhs > 80) {
-    return "You are in a strong position. Focus on scaling investments and long-term wealth growth.";
-  }
-
-  return "Maintain current strategy and continue monitoring your financial position.";
+  // 4. Optimization Priority
+  return "Priority Action: You are in an optimized state. Focus on maximizing income and tax-efficient wealth growth.";
 }
 

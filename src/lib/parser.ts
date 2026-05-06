@@ -122,6 +122,8 @@ export function parseMessage(message: string, profile: UserProfileSchema): UserP
     const rawNumbers = text.match(/[\d,.]+/g) || [];
     if (rawNumbers.length > 0) {
       throw new Error("I see numbers here, but I'm not sure what they represent. Could you clarify if they are for income, expenses, loans, or investments?");
+    } else {
+      throw new Error("I didn't detect any financial data (income, expenses, loans, or assets) in your message. How can I help you update your profile?");
     }
   }
 

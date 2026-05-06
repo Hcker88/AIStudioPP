@@ -4,7 +4,6 @@ import { StatCard } from '../ui/StatCard';
 import { LoanRow } from '../ui/LoanRow';
 import { formatINR } from '../../lib/formatters';
 import { AdvisoryChat } from '../chat/AdvisoryChat';
-import { compareStrategies } from '../../lib/financialMath';
 import { InsightsList } from './InsightsList';
 import { PortfolioCard } from './PortfolioCard';
 import { GoalsCard } from './GoalsCard';
@@ -31,9 +30,7 @@ export function DashboardSection({
 }: DashboardSectionProps) {
   const { profile } = useFinance();
 
-  const strategyResults = useMemo(() => {
-    return compareStrategies(loans, 0, 0); // extra payment 0 for now
-  }, [loans]);
+  const strategyResults: any[] = []; // removed financialMath compareStrategies
 
   const metrics = {
     netWorth: profile?.metrics?.netWorth || 0,

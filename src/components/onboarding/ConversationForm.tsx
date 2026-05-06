@@ -7,7 +7,20 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowRight, Sparkles, Zap, AlertCircle, ArrowLeft, Plus, Trash2, FileText } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { dataSanitizer } from '../../lib/ai/dataSanitizer';
+
+// Mock dataSanitizer
+const dataSanitizer = {
+  sanitizeAmount: (value: any) => {
+    const numValue = typeof value === 'string' ? parseFloat(value.replace(/,/g, '')) : value;
+    if (isNaN(numValue)) return { isValid: false, type: 'ERROR', message: 'Invalid number' };
+    return { isValid: true, type: 'CORRECTION', correctedValue: numValue };
+  },
+  sanitizeInterestRate: (value: any) => {
+    const numValue = typeof value === 'string' ? parseFloat(value.replace(/,/g, '')) : value;
+    if (isNaN(numValue)) return { isValid: false, type: 'ERROR', message: 'Invalid rate' };
+    return { isValid: true, type: 'CORRECTION', correctedValue: numValue };
+  }
+};
 
 interface ConversationFormProps {
   onComplete: (data: any) => void;
