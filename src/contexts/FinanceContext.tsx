@@ -1,16 +1,16 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
-import { auth, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase.ts';
-import { fetchFullProfile, applyParsedUpdates, createFullProfile, saveInsights, updateUserMetrics } from '../lib/persistence.ts';
-import { FullProfile, Insight } from '../lib/types.ts';
-import { calculateMetrics } from '../lib/financialEngine.ts';
-import { generateInsights } from '../lib/insightsEngine.ts';
-import { parseMessage } from '../lib/localParser.ts';
-import { getNextBestAction } from '../lib/advisor.ts';
+import { auth, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
+import { UserProfileSchema } from '../lib/types';
+import { parseMessage } from '../lib/parser';
+import { calculateNetWorth, calculateSavingsRate, calculateDebtRatio, calculateFHS } from '../lib/finance';
+import { generateInsights } from '../lib/insights';
+import { getNextBestAction } from '../lib/advisor';
+import { fetchUserProfile, saveUserProfile } from '../lib/profileDb';
 
 interface FinanceContextType {
   user: any;
-  profile: FullProfile | null;
+  profile: UserProfileSchema | null;
   loading: boolean;
   login: () => Promise<void>;
   logout: () => Promise<void>;
@@ -22,14 +22,21 @@ const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<FullProfile | null>(null);
+  const [profile, setProfile] = useState<UserProfileSchema | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadProfile = async (uid: string) => {
-    let p = await fetchFullProfile(uid);
-    if (!p) {
-      p = await createFullProfile(uid, auth.currentUser?.email || 'unknown');
-    }
+    const p = await fetchUserProfile(uid);
+    // Auto-calculate metrics on load
+    const netWorth = calculateNetWorth(p);
+    const savingsRate = calculateSavingsRate(p);
+    const debtRatio = calculateDebtRatio(p);
+    const fhs = calculateFHS(p);
+    p.metrics = { netWorth, savingsRate, debtRatio, financialHealthScore: fhs };
+    
+    const insights = generateInsights(p);
+    p.insights = insights;
+    
     setProfile(p);
   };
 
@@ -66,46 +73,37 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const processChatMessage = async (message: string): Promise<string> => {
     if (!user || !profile) return "Please login first.";
 
-    // 1. Parse input
-    const extractedEntities = parseMessage(message, profile);
-    
-    // Check if any updates exist
-    const hasUpdates = Object.values(extractedEntities).some((arr: any) => arr && arr.length > 0);
-
-    if (hasUpdates) {
-      // 2. Persist 
-      await applyParsedUpdates(user.uid, extractedEntities);
+    try {
+      // 1. & 2. Parse input and extract data safely
+      const updatedProfile = parseMessage(message, profile);
       
-      // Re-fetch active profile to get fresh data including past data
-      const updatedProfile = await fetchFullProfile(user.uid);
-      if (updatedProfile) {
-        const metrics = calculateMetrics(updatedProfile);
-        await updateUserMetrics(user.uid, metrics);
-        updatedProfile.user.metrics = metrics;
+      // 3. Recalculate metrics
+      const netWorth = calculateNetWorth(updatedProfile);
+      const savingsRate = calculateSavingsRate(updatedProfile);
+      const debtRatio = calculateDebtRatio(updatedProfile);
+      const fhs = calculateFHS(updatedProfile);
+      updatedProfile.metrics = { netWorth, savingsRate, debtRatio, financialHealthScore: fhs };
+      
+      // 4. Generate intelligent insights
+      const insights = generateInsights(updatedProfile);
+      updatedProfile.insights = insights;
 
-        // 3. Generate Insights
-        const insights = generateInsights(updatedProfile);
-        await saveInsights(user.uid, insights);
-        updatedProfile.insights = insights;
+      // 5. Generate Next Best Action
+      const action = getNextBestAction(updatedProfile);
 
-        setProfile(updatedProfile);
+      // 6. Save to Firebase (Single Source of Truth)
+      await saveUserProfile(user.uid, updatedProfile);
 
-        // 4. Killer Feature: Next Best Action
-        const action = getNextBestAction(updatedProfile);
-        
-        // Format response exactly as requested
-        const insightMessages = insights.map(i => i.content);
-        return insightMessages.join(" ") + "\n\nNext Step: " + action;
-      }
-    } else {
-      // Return insight and action even if no new items added
-      const insights = generateInsights(profile);
-      const action = getNextBestAction(profile);
-      const insightMessages = insights.map(i => i.content);
-      return insightMessages.join(" ") + "\n\nNext Step: " + action;
+      // Refresh real-time UI state
+      setProfile(updatedProfile);
+
+      // 7. Return structured, meaningful response
+      return `${insights.join(" ")}\n\nNext Step: ${action}`;
+      
+    } catch (e: any) {
+      console.error("Pipeline failure:", e);
+      return e.message || "I encountered an issue processing your data. Could you please specify it clearly again?";
     }
-
-    return "I couldn't process your financial updates. Please try again.";
   };
 
   return (
@@ -122,3 +120,4 @@ export function useFinance() {
   }
   return context;
 }
+

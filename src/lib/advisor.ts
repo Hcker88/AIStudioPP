@@ -1,9 +1,9 @@
-import { FullProfile } from './types.ts';
-import { calculateSavingsRate, calculateDebtToIncomeRatio, calculateFHS } from './financialEngine.ts';
+import { UserProfileSchema } from "./types";
+import { calculateSavingsRate, calculateDebtRatio, calculateFHS } from "./finance";
 
-export function getNextBestAction(profile: FullProfile): string {
+export function getNextBestAction(profile: UserProfileSchema): string {
   const savingsRate = calculateSavingsRate(profile);
-  const debtRatio = calculateDebtToIncomeRatio(profile);
+  const debtRatio = calculateDebtRatio(profile);
   const fhs = calculateFHS(profile);
 
   // PRIORITY-BASED DECISION
@@ -16,7 +16,7 @@ export function getNextBestAction(profile: FullProfile): string {
     return "Increase your monthly savings. Even a 10% adjustment will significantly improve your trajectory.";
   }
 
-  if (profile.holdings.length === 0) {
+  if (!profile.assets.stocks || profile.assets.stocks.length === 0) {
     return "You currently have no growth assets. Consider allocating a portion into equities.";
   }
 
@@ -26,3 +26,4 @@ export function getNextBestAction(profile: FullProfile): string {
 
   return "Maintain current strategy and continue monitoring your financial position.";
 }
+

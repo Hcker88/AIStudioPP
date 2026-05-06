@@ -10,6 +10,7 @@ import { PortfolioCard } from './PortfolioCard';
 import { GoalsCard } from './GoalsCard';
 import { useFinance } from '../../contexts/FinanceContext';
 import { getNextBestAction } from '../../lib/advisor';
+import { UserProfileSchema } from '../../lib/types';
 
 interface DashboardSectionProps {
   income: number;
@@ -35,12 +36,43 @@ export function DashboardSection({
   }, [loans]);
 
   const metrics = {
-    netWorth: profile?.user?.metrics?.netWorth || 0,
-    monthlyCashFlow: profile?.user?.metrics?.monthlyCashFlow || 0,
-    savingsRate: profile?.user?.metrics?.savingsRate || 0,
-    debtToIncomeRatio: profile?.user?.metrics?.debtToIncomeRatio || 0,
-    financialHealthScore: profile?.user?.metrics?.financialHealthScore || 50
+    netWorth: profile?.metrics?.netWorth || 0,
+    monthlyCashFlow: (profile?.income || 0) - (profile?.expenses || 0) - (loans.reduce((acc, l) => acc + l.monthlyEmi, 0)),
+    savingsRate: profile?.metrics?.savingsRate || 0,
+    debtToIncomeRatio: profile?.metrics?.debtRatio || 0,
+    financialHealthScore: profile?.metrics?.financialHealthScore || 50
   };
+
+  const mappedInsights = profile?.insights?.map((text, i) => ({
+    id: `insight_${i}`,
+    userId: user?.id,
+    content: text,
+    priority: text.toLowerCase().includes('critical') || text.toLowerCase().includes('priority') ? 'CRITICAL' : 'HIGH',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  })) || [];
+
+  const mappedHoldings = profile?.assets?.stocks?.map(s => ({
+    userId: user?.id,
+    symbol: s.name,
+    assetName: s.name,
+    assetType: 'EQUITY',
+    quantity: s.quantity,
+    buyPrice: s.buyPrice,
+    currentPrice: s.currentPrice || s.buyPrice,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  })) || [];
+
+  const mappedGoals = profile?.goals?.map(g => ({
+    userId: user?.id,
+    name: g.text,
+    targetAmount: 0,
+    currentSavings: 0,
+    targetDate: new Date(g.createdAt + 31536000000).toISOString(), // 1 year
+    createdAt: new Date(g.createdAt).toISOString(),
+    updatedAt: new Date(g.createdAt).toISOString()
+  })) || [];
 
   return (
     <>
@@ -70,13 +102,13 @@ export function DashboardSection({
           </div>
         </div>
 
-        {profile?.insights && profile.insights.length > 0 && (
-          <InsightsList insights={profile.insights} />
+        {mappedInsights.length > 0 && (
+          <InsightsList insights={mappedInsights as any} />
         )}
 
-        <PortfolioCard holdings={profile?.holdings || []} isPrivacyMode={isPrivacyMode} />
+        <PortfolioCard holdings={mappedHoldings as any} isPrivacyMode={isPrivacyMode} />
         
-        <GoalsCard goals={profile?.goals || []} isPrivacyMode={isPrivacyMode} />
+        <GoalsCard goals={mappedGoals as any} isPrivacyMode={isPrivacyMode} />
 
         {/* Actionable Next Move Card */}
         <div className="bg-[#1f1f28] border border-[#F27D26]/30 rounded-sm p-6 shadow-[0_0_30px_rgba(242,125,38,0.1)] relative overflow-hidden">
@@ -134,3 +166,4 @@ export function DashboardSection({
     </>
   );
 }
+

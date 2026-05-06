@@ -2,8 +2,9 @@ import React, { Suspense } from 'react';
 import { motion } from 'motion/react';
 import { ConversationForm } from '../onboarding/ConversationForm';
 import { useFinance } from '../../contexts/FinanceContext';
-import { applyParsedUpdates, fetchFullProfile, updateUserMetrics } from '../../lib/persistence';
-import { calculateMetrics } from '../../lib/financialEngine';
+import { fetchUserProfile, saveUserProfile } from '../../lib/profileDb';
+import { calculateNetWorth, calculateSavingsRate, calculateDebtRatio, calculateFHS } from '../../lib/finance';
+import { generateInsights } from '../../lib/insights';
 
 interface OnboardingSectionProps {
   onComplete: () => void;
@@ -26,28 +27,23 @@ export function OnboardingSection({
         <ConversationForm onComplete={async (data) => {
           if (user?.uid) {
             try {
-              const updates: any = {};
-              if (data.income) updates.incomes = [{ source: 'Primary', frequency: 'MONTHLY', amount: data.income }];
-              if (data.expenses) updates.expenses = [{ category: 'General', frequency: 'MONTHLY', amount: data.expenses }];
+              const p = await fetchUserProfile(user.uid);
+              if (data.income) p.income = data.income;
+              if (data.expenses) p.expenses = data.expenses;
               if (data.loans && data.loans.length > 0) {
-                updates.loans = data.loans.map((l: any) => ({
-                  name: l.name,
-                  principalAmount: l.principal,
-                  interestRate: l.rate,
-                  monthlyEmi: l.emi,
-                  startDate: new Date().toISOString()
-                }));
+                p.loans = data.loans.map((l: any) => l.principal);
               }
               
-              await applyParsedUpdates(user.uid, updates);
+              const netWorth = calculateNetWorth(p);
+              const savingsRate = calculateSavingsRate(p);
+              const debtRatio = calculateDebtRatio(p);
+              const fhs = calculateFHS(p);
+              p.metrics = { netWorth, savingsRate, debtRatio, financialHealthScore: fhs };
               
-              const p = await fetchFullProfile(user.uid);
-              if (p) {
-                 const metrics = calculateMetrics(p);
-                 await updateUserMetrics(user.uid, metrics);
-                 await refreshProfile();
-              }
+              p.insights = generateInsights(p);
 
+              await saveUserProfile(user.uid, p);
+              await refreshProfile();
             } catch (err) {
               console.error("Failed to save onboarding", err);
             }

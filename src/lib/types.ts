@@ -99,14 +99,24 @@ export interface Insight {
   updatedAt: string;
 }
 
-export interface FullProfile {
-  user: UserProfile;
-  incomes: Income[];
-  expenses: Expense[];
-  loans: Loan[];
-  assets: Asset[];
-  subscriptions: Subscription[];
-  holdings: InvestmentHolding[];
-  goals: FinancialGoal[];
-  insights: Insight[];
+export interface UserProfileSchema {
+  income: number;
+  expenses: number;
+  loans: number[];
+  assets: {
+    stocks: { name: string; quantity: number; buyPrice: number; currentPrice?: number }[];
+    gold: number;
+  };
+  subscriptions: number;
+  goals: { text: string; createdAt: number }[];
+  riskProfile: string;
+  history: { snapshot: any; timestamp: number }[];
+  lastUpdated: number;
+  insights?: string[];
+  metrics?: {
+    netWorth: number;
+    savingsRate: number;
+    debtRatio: number;
+    financialHealthScore: number;
+  };
 }

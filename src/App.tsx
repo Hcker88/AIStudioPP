@@ -351,8 +351,8 @@ function DashboardContent() {
                       </div>
                     ) : (
                       <DashboardSection 
-                        income={profile?.incomes?.reduce((acc, inc) => acc + inc.amount, 0) || 0}
-                        loans={profile?.loans || []}
+                        income={profile?.income || 0}
+                        loans={profile?.loans?.map((l: number, i: number) => ({ name: `Loan ${i+1}`, principalAmount: l, interestRate: 15, monthlyEmi: l * 0.05 })) || []}
                         isPrivacyMode={isPrivacyMode}
                         highlightedCard={null}
                         user={user}
