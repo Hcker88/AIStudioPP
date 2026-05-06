@@ -53,11 +53,18 @@ export function AdvisoryChat() {
     setIsTyping(true);
 
     try {
-      const responseText = await processChatMessage(text);
-      setMessages(prev => [...prev, { role: 'assistant', content: responseText }]);
-    } catch (error) {
+      const response = await processChatMessage(text);
+      let content = "";
+      if (response.summary) content += `**Summary**: ${response.summary}\n\n`;
+      if (response.insights && response.insights.length > 0) {
+        content += `**Insights**:\n${response.insights.map((i: string) => `• ${i}`).join("\n")}\n\n`;
+      }
+      if (response.nextAction) content += `**🎯 Next Action**: ${response.nextAction}`;
+      
+      setMessages(prev => [...prev, { role: 'assistant', content: content.trim() }]);
+    } catch (error: any) {
       console.error('Chat error:', error);
-      setMessages(prev => [...prev, { role: 'assistant', content: 'I encountered an error processing your request. Please try again.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: error.message || 'I encountered an error processing your request. Please try again.' }]);
     } finally {
       setIsTyping(false);
     }
@@ -104,11 +111,18 @@ export function AdvisoryChat() {
                   ? "bg-[#F27D26] text-black font-medium border border-[#F27D26]/20" 
                   : "bg-[#111116] border border-white/8 backdrop-blur-sm shadow-md"
               )}>
-                {msg.content.split('\n').map((line, j) => (
-                  <p key={j} className={cn(line.startsWith('[Verified') ? "mt-3 pt-3 border-t border-white/10 font-mono text-[10px] opacity-60" : "")}>
-                    {line}
-                  </p>
-                ))}
+                {msg.content.split('\n').map((line, j) => {
+                  const lineContent = line.replace(/\*\*(.*?)\*\*/g, '$1'); // strip bold for now
+                  const isList = lineContent.startsWith('•');
+                  return (
+                    <p key={j} className={cn(
+                      "min-h-[1em]",
+                      isList ? "ml-4 text-white/90" : "font-medium"
+                    )}>
+                      {lineContent}
+                    </p>
+                  );
+                })}
               </div>
             </motion.div>
           ))}

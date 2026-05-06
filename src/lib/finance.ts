@@ -15,8 +15,6 @@ export function calculateDebtRatio(profile: UserProfileSchema): number {
   if (!profile.income || profile.income === 0) return 0;
   
   const totalDebt = profile.loans.reduce((acc, curr) => acc + curr, 0);
-  // Using debt-to-income loosely on total debt relative to annual income, or monthly implied
-  // Usually it is monthly debt payment / monthly income. Since we only have principal, we simulate an EMI (e.g. 2% of total debt per month)
   const estimatedMonthlyEMI = totalDebt * 0.02; 
   return estimatedMonthlyEMI / profile.income;
 }

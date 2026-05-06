@@ -8,13 +8,19 @@ import { generateInsights } from '../lib/insights';
 import { getNextBestAction } from '../lib/advisor';
 import { fetchUserProfile, saveUserProfile } from '../lib/profileDb';
 
+export interface ChatResponse {
+  insights: string[];
+  nextAction: string;
+  summary: string;
+}
+
 interface FinanceContextType {
   user: any;
   profile: UserProfileSchema | null;
   loading: boolean;
   login: () => Promise<void>;
   logout: () => Promise<void>;
-  processChatMessage: (message: string) => Promise<string>;
+  processChatMessage: (message: string) => Promise<ChatResponse>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -70,8 +76,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     await signOut(auth);
   };
 
-  const processChatMessage = async (message: string): Promise<string> => {
-    if (!user || !profile) return "Please login first.";
+  const processChatMessage = async (message: string): Promise<ChatResponse> => {
+    if (!user || !profile) {
+      throw new Error("Please login first.");
+    }
 
     try {
       const lowerMsg = message.toLowerCase();
@@ -96,7 +104,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
          } else {
             changeText = `📊 **Summary**\n• Net Worth: ₹${nw.toLocaleString("en-IN")}\n• Savings Rate: ${(sr * 100).toFixed(1)}%\n• Debt Ratio: ${(dr * 100).toFixed(1)}%\n• FHS: ${profile.metrics?.financialHealthScore || calculateFHS(profile)}/100`;
          }
-         return changeText + `\n\nNext Step: ${getNextBestAction(profile)}`;
+         return {
+           insights: [],
+           nextAction: getNextBestAction(profile),
+           summary: changeText
+         };
       }
 
       // 1. & 2. Parse input and extract data safely
@@ -118,7 +130,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
       // Auto-trigger weekly/checkpoint report on every 5th valid history snapshot update
       // Since it's cloned, history isn't updated here until save, but we check if we should trigger
-      let extraReportText = "";
+      let extraReportText = "Profile updated successfully.";
       if (profile.history && profile.history.length > 0 && profile.history.length % 5 === 0) {
         // Build an automated baseline report
         const latestHistory = profile.history[profile.history.length - 1]; // Before this current update
@@ -127,7 +139,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         const prevLiabilities = prev.loans?.reduce((acc: number, l: any) => acc + l, 0) || 0;
         const prevNetWorth = prevTotalAssets - prevLiabilities;
          
-        extraReportText = `\n\n📊 **Checkpoint Report (Every 5 updates)**\n` +
+        extraReportText += `\n\n📊 **Checkpoint Report (Every 5 updates)**\n` +
                           `• Net Worth Status: ₹${netWorth.toLocaleString("en-IN")} ` + 
                           (netWorth >= prevNetWorth ? `(Up by ₹${(netWorth - prevNetWorth).toLocaleString("en-IN")})` : `(Down)`) + `\n` +
                           `• Current FHS: ${fhs}/100`;
@@ -140,11 +152,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       setProfile(updatedProfile);
 
       // 7. Return structured, meaningful response
-      return `${insights.join(" ")}${extraReportText}\n\nNext Step: ${action}`;
+      return {
+        insights,
+        nextAction: action,
+        summary: extraReportText
+      };
       
     } catch (e: any) {
       console.error("Pipeline failure:", e);
-      return e.message || "I encountered an issue processing your data. Could you please specify it clearly again?";
+      throw new Error(e.message || "I encountered an issue processing your data. Could you please specify it clearly again?");
     }
   };
 

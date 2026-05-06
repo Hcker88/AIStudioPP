@@ -43,53 +43,61 @@ export async function fetchUserProfile(userId: string): Promise<UserProfileSchem
   return { ...defaultProfile };
 }
 
-export async function saveUserProfile(userId: string, profile: UserProfileSchema): Promise<void> {
-  try {
-    const auth = getAuth();
-    if (!auth.currentUser || auth.currentUser.uid !== userId) {
-      throw new Error(JSON.stringify({
-        error: "Missing or insufficient permissions.",
-        operationType: "write",
-        path: `users/${userId}/profile/current`,
-        authInfo: {
-          userId: auth.currentUser?.uid,
-          email: auth.currentUser?.email
-        }
-      }));
-    }
-
-    const docRef = doc(db, 'users', userId, 'profile', 'current');
-    // We snapshot the change.
-    // Limit history memory payload to 5 elements to save on space
-    const profileToSave = { ...profile };
-    // Create stripped snapshot
-    const snapshot = {
-      income: profileToSave.income,
-      expenses: profileToSave.expenses,
-      loans: [...profileToSave.loans],
-      assets: { ...profileToSave.assets }
+export async function saveUserProfile(userId: string, profile: UserProfileSchema, retries = 3): Promise<void> {
+  const auth = getAuth();
+  if (!auth.currentUser || auth.currentUser.uid !== userId) {
+    const errInfo = {
+      error: "Missing or insufficient permissions.",
+      operationType: "write",
+      path: `users/${userId}/profile/current`,
+      authInfo: {
+        userId: auth.currentUser?.uid,
+        email: auth.currentUser?.email
+      }
     };
-    
-    profileToSave.history = [...(profileToSave.history || [])];
-    profileToSave.history.push({ snapshot, timestamp: Date.now() });
+    throw new Error(JSON.stringify(errInfo));
+  }
 
-    if (profileToSave.history.length > 15) {
-      profileToSave.history = profileToSave.history.slice(profileToSave.history.length - 15);
-    }
-    
-    profileToSave.lastUpdated = Date.now();
-    await setDoc(docRef, profileToSave, { merge: true });
-  } catch (error: any) {
-    if (error.message && error.message.includes("Missing or insufficient permissions")) {
-      const errInfo = {
-         error: error.message,
-         operationType: 'write',
-         path: `users/${userId}/profile/current`,
-         authInfo: { userId: getAuth().currentUser?.uid }
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const docRef = doc(db, 'users', userId, 'profile', 'current');
+      
+      const profileToSave = { ...profile };
+      const snapshot = {
+        income: profileToSave.income,
+        expenses: profileToSave.expenses,
+        loans: [...profileToSave.loans],
+        assets: { ...profileToSave.assets }
       };
-      console.error('Firestore Error: ', JSON.stringify(errInfo));
-      throw new Error(JSON.stringify(errInfo));
+      
+      profileToSave.history = [...(profileToSave.history || [])];
+      profileToSave.history.push({ snapshot, timestamp: Date.now() });
+
+      if (profileToSave.history.length > 15) {
+        profileToSave.history = profileToSave.history.slice(profileToSave.history.length - 15);
+      }
+      
+      profileToSave.lastUpdated = Date.now();
+      await setDoc(docRef, profileToSave, { merge: true });
+      return; // Success
+    } catch (error: any) {
+      if (error.message && error.message.includes("Missing or insufficient permissions")) {
+        const errInfo = {
+           error: error.message,
+           operationType: 'write',
+           path: `users/${userId}/profile/current`,
+           authInfo: { userId: auth.currentUser?.uid }
+        };
+        console.error('Firestore Error: ', JSON.stringify(errInfo));
+        throw new Error(JSON.stringify(errInfo));
+      }
+      
+      console.error(`Error saving user profile (Attempt ${attempt}/${retries}):`, error);
+      if (attempt === retries) {
+        throw new Error("Failed to save profile after multiple attempts. Please check your connection.");
+      }
+      // wait 500ms before retrying
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
-    console.error("Error saving user profile:", error);
   }
 }
