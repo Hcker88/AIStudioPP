@@ -101,8 +101,11 @@ export interface Insight {
 
 export interface UserProfileSchema {
   income: number;
+  incomeType?: 'fixed' | 'variable';
   expenses: number;
+  savings?: number;
   loans: number[];
+  emi?: number;
   assets: {
     stocks: { name: string; quantity: number; buyPrice: number; currentPrice?: number }[];
     gold: number;
@@ -110,6 +113,10 @@ export interface UserProfileSchema {
   subscriptions: number;
   goals: { text: string; createdAt: number }[];
   riskProfile: string;
+  habits?: {
+    tracksExpenses: boolean;
+    invests: boolean;
+  };
   history: { snapshot: any; timestamp: number }[];
   lastUpdated: number;
   insights?: string[];

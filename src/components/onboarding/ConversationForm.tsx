@@ -3,399 +3,269 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowRight, Sparkles, Zap, AlertCircle, ArrowLeft, Plus, Trash2, FileText } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle2, Zap } from 'lucide-react';
 import { cn } from '../../lib/utils';
-
-// Mock dataSanitizer
-const dataSanitizer = {
-  sanitizeAmount: (value: any) => {
-    const numValue = typeof value === 'string' ? parseFloat(value.replace(/,/g, '')) : value;
-    if (isNaN(numValue)) return { isValid: false, type: 'ERROR', message: 'Invalid number' };
-    return { isValid: true, type: 'CORRECTION', correctedValue: numValue };
-  },
-  sanitizeInterestRate: (value: any) => {
-    const numValue = typeof value === 'string' ? parseFloat(value.replace(/,/g, '')) : value;
-    if (isNaN(numValue)) return { isValid: false, type: 'ERROR', message: 'Invalid rate' };
-    return { isValid: true, type: 'CORRECTION', correctedValue: numValue };
-  }
-};
 
 interface ConversationFormProps {
   onComplete: (data: any) => void;
 }
 
-export function ConversationForm({ onComplete }: ConversationFormProps) {
-  const [step, setStep] = useState(1);
-  const [error, setError] = useState<string | null>(null);
+type StepId = 
+  'income' | 'incomeType' | 'expenses' | 'savings' | 'hasLoans' | 'loans' | 'emi' | 
+  'hasAssets' | 'stocks' | 'gold' | 'goals' | 'tracks' | 'invests' | 'done';
+
+interface Step {
+  id: StepId;
+  question: string;
+  type: 'NUMBER' | 'CHOICE' | 'TEXT' | 'MESSAGE';
+  options?: { label: string; value: string }[];
+  condition?: (answers: any) => boolean;
+}
+
+const STEPS: Step[] = [
+  { id: 'income', question: "What's your monthly income?", type: 'NUMBER' },
+  { id: 'incomeType', question: "Is your income fixed or does it change every month?", type: 'CHOICE', options: [{label: 'Fixed', value: 'fixed'}, {label: 'Variable', value: 'variable'}] },
+  { id: 'expenses', question: "Roughly how much do you spend monthly?", type: 'NUMBER' },
+  { id: 'savings', question: "How much savings do you currently have?", type: 'NUMBER' },
+  { id: 'hasLoans', question: "Do you have any loans?", type: 'CHOICE', options: [{label: 'Yes', value: 'yes'}, {label: 'No', value: 'no'}] },
+  { id: 'loans', question: "How much is your total outstanding loan amount?", type: 'NUMBER', condition: (answers) => answers.hasLoans === 'yes' },
+  { id: 'emi', question: "How much EMI do you pay monthly?", type: 'NUMBER', condition: (answers) => answers.hasLoans === 'yes' },
+  { id: 'hasAssets', question: "Do you invest in stocks or gold?", type: 'CHOICE', options: [{label: 'Yes', value: 'yes'}, {label: 'No', value: 'no'}] },
+  { id: 'stocks', question: "How much do you have invested in stocks/mutual funds?", type: 'NUMBER', condition: (answers) => answers.hasAssets === 'yes' },
+  { id: 'gold', question: "How much do you have invested in gold?", type: 'NUMBER', condition: (answers) => answers.hasAssets === 'yes' },
+  { id: 'goals', question: "What is your main financial goal right now?", type: 'TEXT' },
+  { id: 'tracks', question: "Do you track your expenses regularly?", type: 'CHOICE', options: [{label: 'Yes', value: 'yes'}, {label: 'No', value: 'no'}] },
+  { id: 'invests', question: "Do you invest regularly?", type: 'CHOICE', options: [{label: 'Yes', value: 'yes'}, {label: 'No', value: 'no'}] },
+];
+
+export function ConversationForm({ onComplete }: { onComplete: (data: any) => void }) {
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [inputValue, setInputValue] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const [incomes, setIncomes] = useState<{ source: string; amount: string }[]>([
-    { source: 'Primary Salary', amount: '150000' }
-  ]);
-  const [expenses, setExpenses] = useState<{ category: string; amount: string; isFixed: boolean }[]>([
-    { category: 'Housing & Utilities', amount: '45000', isFixed: true }
-  ]);
+  const activeSteps = STEPS.filter((step) => {
+    if (step.condition && !step.condition(answers)) return false;
+    return true;
+  });
 
-  // Step 2: Assets
-  const [assets, setAssets] = useState<{ name: string; amount: string; type: string }[]>([
-    { name: 'Savings Account', amount: '200000', type: 'CASH' }
-  ]);
+  const currentStep = activeSteps[currentStepIndex];
+  const historySteps = activeSteps.slice(0, currentStepIndex);
 
-  // Step 3: Liabilities
-  const [loans, setLoans] = useState<{ name: string; principal: string; emi: string; rate: string }[]>([
-    { name: 'Home Loan', principal: '4500000', emi: '38000', rate: '8.5' }
-  ]);
-
-  const [isParsing, setIsParsing] = useState(false);
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsParsing(true);
-    setError(null);
-    try {
-      const text = await file.text();
-      const response = await fetch('/api/parse-statement', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
-
-      if (!response.ok) throw new Error('Analysis failed.');
-      
-      const resData = await response.json();
-      if (resData.success && resData.data) {
-        if (resData.data.incomes && resData.data.incomes.length > 0) setIncomes(resData.data.incomes);
-        if (resData.data.expenses && resData.data.expenses.length > 0) setExpenses(resData.data.expenses);
-        if (resData.data.assets && resData.data.assets.length > 0) setAssets(resData.data.assets);
-        if (resData.data.loans && resData.data.loans.length > 0) setLoans(resData.data.loans);
-      } else {
-        throw new Error('Unable to parse document format.');
-      }
-    } catch (err) {
-      console.error(err);
-      setError('Import failed. Please try adding manually.');
-    } finally {
-      setIsParsing(false);
-      // reset file input
-      e.target.value = '';
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
     }
-  };
-
-  const applySanitizedAmounts = (items: any[], type: 'incomes' | 'expenses' | 'assets') => {
-    let hasError = false;
-    let errorMessage = '';
-    const correctedItems = items.map(item => {
-      const res = dataSanitizer.sanitizeAmount(item.amount);
-      if (res.type === 'ERROR') {
-        hasError = true;
-        errorMessage = res.message || 'Invalid amount.';
-      } else if (res.type === 'CORRECTION' && res.correctedValue !== undefined) {
-        return { ...item, amount: res.correctedValue.toString() };
-      }
-      return item;
-    });
-    return { hasError, errorMessage, correctedItems };
-  };
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [currentStepIndex, activeSteps.length]);
 
   const handleNext = () => {
-    setError(null);
-    if (step === 1) {
-      const { hasError: incErr, errorMessage: incMsg, correctedItems: nextIncomes } = applySanitizedAmounts(incomes, 'incomes');
-      if (incErr) { setError(incMsg); return; }
+    if (!currentStep) return;
+
+    if (currentStep.type === 'NUMBER' || currentStep.type === 'TEXT') {
+      if (!inputValue.trim() && currentStep.type !== 'TEXT') return; 
       
-      const { hasError: expErr, errorMessage: expMsg, correctedItems: nextExpenses } = applySanitizedAmounts(expenses, 'expenses');
-      if (expErr) { setError(expMsg); return; }
+      const val = currentStep.type === 'NUMBER' ? parseFloat(inputValue.replace(/,/g, '')) : inputValue;
+      if (currentStep.type === 'NUMBER' && isNaN(val as number)) return;
 
-      setIncomes(nextIncomes);
-      setExpenses(nextExpenses);
+      setAnswers(prev => ({ ...prev, [currentStep.id]: val }));
+    }
 
-      const incomeVal = nextIncomes.reduce((acc, curr) => acc + Number(curr.amount), 0);
-      
-      if (isNaN(incomeVal) || incomeVal <= 0) {
-        setError("Total monthly income must be greater than ₹0 to calculate projections.");
-        return;
-      }
-      setStep(2);
-    } else if (step === 2) {
-      const { hasError: astErr, errorMessage: astMsg, correctedItems: nextAssets } = applySanitizedAmounts(assets, 'assets');
-      if (astErr) { setError(astMsg); return; }
-      setAssets(nextAssets);
-      setStep(3);
-    } else if (step === 3) {
-      const nextLoans = [...loans];
-      for (const [index, loan] of loans.entries()) {
-        const prinRes = dataSanitizer.sanitizeAmount(loan.principal);
-        if (prinRes.type === 'ERROR') { setError(`Invalid principal for ${loan.name}`); return; }
-        if (prinRes.correctedValue !== undefined) nextLoans[index].principal = prinRes.correctedValue.toString();
+    setInputValue('');
+    goToNextStep();
+  };
 
-        const emiRes = dataSanitizer.sanitizeAmount(loan.emi);
-        if (emiRes.type === 'ERROR') { setError(`Invalid EMI for ${loan.name}`); return; }
-        if (emiRes.correctedValue !== undefined) nextLoans[index].emi = emiRes.correctedValue.toString();
+  const handleChoice = (value: string) => {
+    setAnswers(prev => ({ ...prev, [currentStep.id]: value }));
+    goToNextStep();
+  };
 
-        const rateRes = dataSanitizer.sanitizeInterestRate(loan.rate);
-        if (rateRes.type === 'ERROR') { setError(rateRes.message || `Invalid rate for ${loan.name}`); return; }
-        if (rateRes.correctedValue !== undefined) nextLoans[index].rate = rateRes.correctedValue.toString();
-      }
-      setLoans(nextLoans);
-      
-      // Complete
-      setIsSubmitting(true);
-      onComplete({
-        income: incomes.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0),
-        expenses: expenses.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0),
-        detailedExpenses: expenses.map((e: any) => ({ category: e.category, amount: Number(e.amount), isFixed: e.isFixed })),
-        detailedIncomes: incomes.map((i: any) => ({ source: i.source, amount: Number(i.amount) })),
-        assets: assets.map((a: any) => ({ ...a, amount: Number(a.amount) })),
-        loans: nextLoans.map((l: any) => ({ ...l, principal: Number(l.principal), emi: Number(l.emi), rate: Number(l.rate) })),
-        loanType: nextLoans.length > 0 ? nextLoans[0].name : 'None',
-        emi: nextLoans.length > 0 ? Number(nextLoans[0].emi) : 0,
-        rate: nextLoans.length > 0 ? Number(nextLoans[0].rate) : 0
-      });
+  const goToNextStep = () => {
+    if (currentStepIndex < activeSteps.length - 1) {
+      setCurrentStepIndex(curr => curr + 1);
+    } else {
+      finishOnboarding();
     }
   };
 
-  const addAsset = () => setAssets([...assets, { name: 'New Asset', amount: '0', type: 'EQUITY' }]);
-  const removeAsset = (index: number) => setAssets(assets.filter((_, i) => i !== index));
+  const goBack = () => {
+    if (currentStepIndex > 0) {
+      setCurrentStepIndex(curr => curr - 1);
+      const prevStep = activeSteps[currentStepIndex - 1];
+      if (answers[prevStep.id] !== undefined) {
+        setInputValue(answers[prevStep.id].toString());
+      }
+    }
+  };
 
-  const addLoan = () => setLoans([...loans, { name: 'New Loan', principal: '0', emi: '0', rate: '10' }]);
-  const removeLoan = (index: number) => setLoans(loans.filter((_, i) => i !== index));
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleNext();
+    }
+  };
 
-  const addIncome = () => setIncomes([...incomes, { source: 'New Income', amount: '0' }]);
-  const removeIncome = (index: number) => setIncomes(incomes.filter((_, i) => i !== index));
+  const finishOnboarding = () => {
+    setIsSubmitting(true);
+    setTimeout(() => {
+      onComplete({
+        income: Number(answers.income) || 0,
+        incomeType: answers.incomeType || 'fixed',
+        expenses: Number(answers.expenses) || 0,
+        savings: Number(answers.savings) || 0,
+        loans: answers.hasLoans === 'yes' ? [Number(answers.loans) || 0] : [],
+        emi: answers.hasLoans === 'yes' ? (Number(answers.emi) || 0) : 0,
+        assets: {
+          stocks: answers.hasAssets === 'yes' ? (Number(answers.stocks) || 0) : 0,
+          gold: answers.hasAssets === 'yes' ? (Number(answers.gold) || 0) : 0,
+        },
+        goals: answers.goals ? [{ text: answers.goals, createdAt: Date.now() }] : [],
+        habits: {
+          tracksExpenses: answers.tracks === 'yes',
+          invests: answers.invests === 'yes'
+        }
+      });
+    }, 800);
+  };
 
-  const addExpense = () => setExpenses([...expenses, { category: 'New Expense', amount: '0', isFixed: true }]);
-  const removeExpense = (index: number) => setExpenses(expenses.filter((_, i) => i !== index));
+  if (isSubmitting) {
+    return (
+      <div className="w-full max-w-2xl mx-auto h-[60vh] flex flex-col items-center justify-center space-y-6">
+        <Zap className="text-[#F27D26] w-12 h-12 animate-pulse" />
+        <h2 className="text-2xl font-bold italic serif tracking-tight text-white mb-2">Building Your Financial Engine</h2>
+        <div className="w-48 overflow-hidden rounded-full bg-white/10 p-1">
+          <motion.div 
+            initial={{ width: 0 }} 
+            animate={{ width: "100%" }} 
+            transition={{ duration: 1, ease: "easeInOut" }}
+            className="h-1 bg-[#F27D26] rounded-full"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  const progressPercent = Math.max(5, ((currentStepIndex + 1) / activeSteps.length) * 100);
 
   return (
-    <div className="max-w-4xl mx-auto p-8 lg:p-16 space-y-12 bg-[#111116] border border-white/8 rounded-xl backdrop-blur-md">
-      <div className="flex items-center justify-between border-b border-white/8 pb-6">
-        <div className="flex items-center gap-2 text-[#E8C547]">
-          <Sparkles size={16} />
-          <span className="text-[10px] font-bold uppercase tracking-widest">Financial Audit • Step 0{step}/03</span>
+    <div className="w-full max-w-3xl mx-auto p-4 lg:p-8 flex flex-col min-h-[70vh]">
+      <div className="mb-8 sticky top-0 bg-[#111116] z-10 py-4 border-b border-white/5">
+        <div className="flex justify-between items-center mb-3">
+           <span className="text-[#F27D26] font-mono text-xs font-bold uppercase tracking-widest">Setup Progress {currentStepIndex + 1}/{activeSteps.length}</span>
+           {currentStepIndex > 0 && <button onClick={goBack} className="text-[#F27D26] opacity-70 hover:opacity-100 flex items-center gap-1 text-xs uppercase tracking-widest"><ArrowLeft size={12} /> Back</button>}
         </div>
-        <div className="flex items-center gap-6">
-          <div className="relative group">
-            <input 
-              type="file" 
-              accept=".csv,.txt"
-              onChange={handleFileUpload}
-              disabled={isParsing}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed" 
-            />
-            <button disabled={isParsing} className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 text-[#F27D26] hover:text-white transition-colors bg-[#F27D26]/10 px-3 py-1.5 rounded-sm border border-[#F27D26]/20 group-hover:border-[#F27D26]/50">
-              {isParsing ? <Zap size={14} className="animate-pulse" /> : <FileText size={14} />}
-              {isParsing ? 'Analyzing...' : 'Auto-Import CSV'}
-            </button>
-          </div>
-          <div className="flex gap-2">
-            {[1, 2, 3].map(i => (
-              <div key={i} className={cn("h-1 w-8 rounded-full transition-colors", step >= i ? "bg-[#F27D26]" : "bg-white/20")} />
-            ))}
-          </div>
+        <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+          <motion.div 
+            className="h-full bg-[#F27D26]" 
+            initial={{ width: `${progressPercent}%` }} 
+            animate={{ width: `${progressPercent}%` }} 
+          />
         </div>
       </div>
 
-      <AnimatePresence mode="wait">
-        {step === 1 && (
-          <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-12">
-            <h2 className="text-4xl font-bold tracking-tighter italic serif">Cashflow.</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-              {/* Sector 1: Income */}
-              <div className="space-y-6">
-                <div className="flex justify-between items-end border-b border-white/10 pb-4">
-                  <h3 className="text-xl font-bold tracking-tight text-[#F27D26]">Income Sources</h3>
-                  <button onClick={addIncome} className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 hover:text-white transition-colors opacity-70">
-                    <Plus size={12} /> Add Income
-                  </button>
+      <div className="flex-1 overflow-y-auto space-y-8 pb-32 no-scrollbar pr-4">
+        {/* Chat History */}
+        <AnimatePresence initial={false}>
+          {historySteps.map((step, idx) => (
+            <motion.div 
+              key={`history-${step.id}`} 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-4"
+            >
+              {/* Question bubble */}
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-[#F27D26]/20 flex items-center justify-center shrink-0 border border-[#F27D26]/30">
+                  <span className="text-[#F27D26] text-xs font-bold font-mono">AI</span>
                 </div>
-                <div className="space-y-4">
-                  {incomes.map((inc, index) => (
-                    <div key={`income-${index}`} className="flex items-center gap-4 bg-black/30 p-3 rounded-sm border border-white/5">
-                      <input 
-                        type="text" value={inc.source} onChange={(e) => { const n = [...incomes]; n[index].source = e.target.value; setIncomes(n); }}
-                        className="bg-transparent border-b border-white/10 focus:border-[#F27D26] pb-1 w-full flex-1 focus:outline-none text-sm font-medium"
-                        placeholder="Income Source"
-                      />
-                      <div className="flex items-center gap-1 text-[#F27D26]">
-                        <span>₹</span>
-                        <input 
-                          type="number" value={inc.amount} onChange={(e) => { const n = [...incomes]; n[index].amount = e.target.value; setIncomes(n); }}
-                          className="bg-transparent border-b border-white/10 focus:border-[#F27D26] pb-1 w-24 focus:outline-none font-mono text-sm text-white"
-                          placeholder="Amount"
-                        />
-                      </div>
-                      {incomes.length > 1 && (
-                        <button onClick={() => removeIncome(index)} className="text-red-400 opacity-50 hover:opacity-100 p-1">
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <div className="text-right text-xs uppercase tracking-widest opacity-50 pt-2">
-                    Total Income: <span className="font-bold text-white text-sm">₹{incomes.reduce((acc, curr) => acc + Number(curr.amount), 0).toLocaleString('en-IN')}</span>
-                  </div>
+                <div className="bg-[#1a1a24] border border-white/5 px-6 py-4 rounded-2xl rounded-tl-sm shadow-md">
+                  <p className="text-white/90 font-medium text-lg">{step.question}</p>
                 </div>
               </div>
 
-              {/* Sector 2: Expenses */}
-              <div className="space-y-6">
-                <div className="flex justify-between items-end border-b border-white/10 pb-4">
-                  <h3 className="text-xl font-bold tracking-tight text-[#F27D26]">Monthly Expenses</h3>
-                  <button onClick={addExpense} className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 hover:text-white transition-colors opacity-70">
-                    <Plus size={12} /> Add Expense
-                  </button>
+              {/* Answer bubble */}
+              <div className="flex items-start gap-4 flex-row-reverse">
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0 border border-white/20">
+                  <span className="text-white text-xs font-bold font-mono">YOU</span>
                 </div>
-                <div className="space-y-4">
-                  {expenses.map((exp, index) => (
-                    <div key={`expense-${index}`} className="flex items-center gap-4 bg-black/30 p-3 rounded-sm border border-white/5">
-                      <input 
-                        type="text" value={exp.category} onChange={(e) => { const n = [...expenses]; n[index].category = e.target.value; setExpenses(n); }}
-                        className="bg-transparent border-b border-white/10 focus:border-[#F27D26] pb-1 w-full flex-1 focus:outline-none text-sm font-medium"
-                        placeholder="Expense Category"
-                      />
-                      <div className="flex items-center gap-1 text-red-400">
-                        <span>₹</span>
-                        <input 
-                          type="number" value={exp.amount} onChange={(e) => { const n = [...expenses]; n[index].amount = e.target.value; setExpenses(n); }}
-                          className="bg-transparent border-b border-white/10 focus:border-red-400 pb-1 w-24 focus:outline-none font-mono text-sm text-white"
-                          placeholder="Amount"
-                        />
-                      </div>
-                      {expenses.length > 1 && (
-                        <button onClick={() => removeExpense(index)} className="text-red-400 opacity-50 hover:opacity-100 p-1">
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <div className="text-right text-xs uppercase tracking-widest opacity-50 pt-2">
-                    Total Expenses: <span className="font-bold text-white text-sm">₹{expenses.reduce((acc, curr) => acc + Number(curr.amount), 0).toLocaleString('en-IN')}</span>
-                  </div>
+                <div className="bg-[#F27D26] px-6 py-4 rounded-2xl rounded-tr-sm shadow-md shadow-orange-500/10 text-black">
+                  <p className="font-bold text-lg">
+                    {step.type === 'CHOICE' 
+                      ? step.options?.find(o => o.value === answers[step.id])?.label 
+                      : step.type === 'NUMBER' 
+                        ? `₹ ${Number(answers[step.id]).toLocaleString('en-IN')}`
+                        : answers[step.id]}
+                  </p>
                 </div>
               </div>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          ))}
 
-        {step === 2 && (
-          <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8">
-            <div className="flex justify-between items-end">
-              <h2 className="text-4xl font-bold tracking-tighter italic serif">Assets.</h2>
-              <button onClick={addAsset} className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 text-[#F27D26] hover:text-white transition-colors">
-                <Plus size={14} /> Add Asset
-              </button>
-            </div>
-            <div className="space-y-4">
-              {assets.map((asset, index) => (
-                <div key={index} className="flex flex-wrap items-center gap-4 bg-black/50 p-4 border border-white/10 rounded-sm">
-                  <input 
-                    type="text" value={asset.name} onChange={(e) => { const newAssets = [...assets]; newAssets[index].name = e.target.value; setAssets(newAssets); }}
-                    className="bg-transparent border-b border-white/20 pb-1 focus:outline-none focus:border-[#F27D26] font-bold flex-1 min-w-[150px]"
-                    placeholder="Asset Name"
-                  />
-                  <select 
-                    value={asset.type} onChange={(e) => { const newAssets = [...assets]; newAssets[index].type = e.target.value; setAssets(newAssets); }}
-                    className="bg-transparent border-b border-white/20 pb-1 focus:outline-none focus:border-[#F27D26] text-sm opacity-80 cursor-pointer"
-                  >
-                    <option value="CASH" className="bg-black">Cash/Savings</option>
-                    <option value="EQUITY" className="bg-black">Equity/Stocks</option>
-                    <option value="REAL_ESTATE" className="bg-black">Real Estate</option>
-                    <option value="DEBT" className="bg-black">Bonds/FDs</option>
-                  </select>
-                  <div className="flex items-center gap-2">
-                    <span className="opacity-50">₹</span>
-                    <input 
-                      type="number" value={asset.amount} onChange={(e) => { const newAssets = [...assets]; newAssets[index].amount = e.target.value; setAssets(newAssets); }}
-                      className="bg-transparent border-b border-white/20 pb-1 focus:outline-none focus:border-[#F27D26] font-mono font-bold w-32"
-                      placeholder="Amount"
-                    />
-                  </div>
-                  <button onClick={() => removeAsset(index)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-sm transition-colors">
-                    <Trash2 size={16} />
-                  </button>
+          {/* Current Question */}
+          {currentStep && (
+            <motion.div 
+              key={`current-${currentStep.id}`}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-4 pt-4"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-[#F27D26] flex items-center justify-center shrink-0 shadow-lg shadow-orange-500/30">
+                  <span className="text-black text-xs font-bold font-mono">AI</span>
                 </div>
-              ))}
-              {assets.length === 0 && <p className="text-sm opacity-50 italic">No assets added. Building wealth starts from zero.</p>}
-            </div>
-          </motion.div>
-        )}
-
-        {step === 3 && (
-          <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8">
-            <div className="flex justify-between items-end">
-              <h2 className="text-4xl font-bold tracking-tighter italic serif">Liabilities.</h2>
-              <button onClick={addLoan} className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 text-[#F27D26] hover:text-white transition-colors">
-                <Plus size={14} /> Add Loan
-              </button>
-            </div>
-            <div className="space-y-4">
-              {loans.map((loan, index) => (
-                <div key={index} className="flex flex-wrap items-center gap-4 bg-black/50 p-4 border border-white/10 rounded-sm">
-                  <input 
-                    type="text" value={loan.name} onChange={(e) => { const newLoans = [...loans]; newLoans[index].name = e.target.value; setLoans(newLoans); }}
-                    className="bg-transparent border-b border-white/20 pb-1 focus:outline-none focus:border-[#F27D26] font-bold flex-1 min-w-[120px]"
-                    placeholder="Loan Name"
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase tracking-widest opacity-50">Principal ₹</span>
-                    <input 
-                      type="number" value={loan.principal} onChange={(e) => { const newLoans = [...loans]; newLoans[index].principal = e.target.value; setLoans(newLoans); }}
-                      className="bg-transparent border-b border-white/20 pb-1 focus:outline-none focus:border-[#F27D26] font-mono font-bold w-28"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase tracking-widest opacity-50">EMI ₹</span>
-                    <input 
-                      type="number" value={loan.emi} onChange={(e) => { const newLoans = [...loans]; newLoans[index].emi = e.target.value; setLoans(newLoans); }}
-                      className="bg-transparent border-b border-white/20 pb-1 focus:outline-none focus:border-[#F27D26] font-mono font-bold w-24"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase tracking-widest opacity-50">Rate %</span>
-                    <input 
-                      type="number" value={loan.rate} onChange={(e) => { const newLoans = [...loans]; newLoans[index].rate = e.target.value; setLoans(newLoans); }}
-                      className="bg-transparent border-b border-white/20 pb-1 focus:outline-none focus:border-[#F27D26] font-mono font-bold w-16"
-                    />
-                  </div>
-                  <button onClick={() => removeLoan(index)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-sm transition-colors">
-                    <Trash2 size={16} />
-                  </button>
+                <div className="bg-[#1a1a24] border border-[#F27D26]/30 px-6 py-5 rounded-2xl rounded-tl-sm shadow-xl shadow-black/50 w-full max-w-xl">
+                  <p className="text-white font-medium text-xl md:text-2xl mb-6">{currentStep.question}</p>
+                  
+                  {currentStep.type === 'NUMBER' || currentStep.type === 'TEXT' ? (
+                    <div className="relative group flex items-center">
+                      {currentStep.type === 'NUMBER' && <span className="absolute left-0 text-xl text-[#F27D26] bg-transparent py-4 font-mono pr-2">₹</span>}
+                      <input
+                        ref={inputRef}
+                        type={currentStep.type === 'NUMBER' ? "number" : "text"}
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={currentStep.type === 'NUMBER' ? "0" : "Type..."}
+                        className={cn(
+                          "w-full bg-transparent border-b-2 border-white/20 focus:border-[#F27D26] py-2 text-xl outline-none transition-colors text-white",
+                          currentStep.type === 'NUMBER' ? "font-mono pl-6" : "font-medium"
+                        )}
+                        autoFocus
+                      />
+                      <button 
+                        onClick={handleNext}
+                        className="absolute right-0 bottom-3 text-[#F27D26] hover:text-white transition-colors flex items-center gap-2 text-sm font-bold tracking-widest uppercase bg-black/50 px-3 py-1 rounded-sm"
+                      >
+                        Enter <ArrowRight size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-3">
+                      {currentStep.options?.map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() => handleChoice(opt.value)}
+                          className="flex-1 min-w-[120px] bg-black/40 border border-white/20 hover:border-[#F27D26] hover:bg-[#F27D26]/10 text-white font-bold py-3 px-6 rounded-lg transition-all text-center"
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {currentStep.type === 'TEXT' && inputValue.trim() === '' && (
+                     <p className="text-xs text-white/40 mt-4 text-right cursor-pointer hover:text-white transition-colors" onClick={handleNext}>Skip for now</p>
+                  )}
                 </div>
-              ))}
-              {loans.length === 0 && <p className="text-sm opacity-50 italic">No debt. You are ready to accelerate wealth.</p>}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {error && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-2 text-red-400 bg-red-400/10 p-4 rounded-sm border border-red-400/20">
-          <AlertCircle size={20} />
-          <p className="text-sm font-medium">{error}</p>
-        </motion.div>
-      )}
-
-      <div className="pt-8 border-t border-white/8 flex justify-between items-center">
-        {step > 1 ? (
-          <button onClick={() => setStep(step - 1)} className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 opacity-60 hover:opacity-100 transition-opacity">
-            <ArrowLeft size={14} /> Back
-          </button>
-        ) : <div />}
-        
-        <button 
-          onClick={handleNext}
-          disabled={isSubmitting}
-          className="bg-[#F27D26] text-black px-8 py-4 font-bold rounded-lg shadow-lg shadow-orange-500/20 hover:bg-[#FF8C35] transition-all flex items-center gap-3 disabled:opacity-50"
-        >
-          {isSubmitting ? 'Generating...' : (step === 3 ? 'Generate Strategy' : 'Continue')} 
-          {isSubmitting ? <Zap size={18} className="animate-pulse" /> : (step === 3 ? <Zap size={18} /> : <ArrowRight size={18} />)}
-        </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <div ref={chatEndRef} className="h-10" />
       </div>
     </div>
   );
 }
+
