@@ -1,6 +1,6 @@
 import { UserProfileSchema } from "./types";
 
-export function parseMessage(message: string, profile: UserProfileSchema): UserProfileSchema {
+export function parseMessage(message: string, profile: UserProfileSchema): { updatedProfile: UserProfileSchema, identifiedIntent: boolean } {
   const text = message.toLowerCase();
   const updatedProfile: UserProfileSchema = JSON.parse(JSON.stringify(profile));
   
@@ -132,14 +132,21 @@ export function parseMessage(message: string, profile: UserProfileSchema): UserP
 
   // Fallback intent check
   if (!identifiedIntent) {
-    const rawNumbers = text.match(/[\d,.]+/g) || [];
-    if (rawNumbers.length > 0) {
+    // Only complain about numbers if they look like actual monetary amounts (e.g., > 100 or specific formats like 5k)
+    const rawNumbers = text.match(/(?:(?:rs\.?|inr|₹|\$)\s*)?\d{1,3}(?:,\d{3})*(?:\.\d+)?\b/gi) || [];
+    const validAmountLike = rawNumbers.some(n => {
+      const val = parseFloat(n.replace(/[^\d.]/g, ''));
+      return !isNaN(val) && val > 99; // Ignore numbers under 100 which are often just conversational ("give me 3 tips", "in 5 days")
+    });
+
+    if (validAmountLike) {
       throw new Error("I see numbers here, but I'm not sure what they represent. Could you clarify if they are for income, expenses, loans, or investments?");
-    } else {
-      throw new Error("I didn't detect any financial data (income, expenses, loans, or assets) in your message. How can I help you update your profile?");
     }
   }
 
-  updatedProfile.lastUpdated = Date.now();
-  return updatedProfile;
+  if (identifiedIntent) {
+
+    updatedProfile.lastUpdated = Date.now();
+  }
+  return { updatedProfile, identifiedIntent };
 }

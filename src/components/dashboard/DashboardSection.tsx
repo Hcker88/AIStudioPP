@@ -1,5 +1,5 @@
-import React, { Suspense, useMemo } from 'react';
-import { Sparkles, Activity } from 'lucide-react';
+import React, { Suspense, useMemo, useState } from 'react';
+import { Sparkles, Activity, Edit3 } from 'lucide-react';
 import { StatCard } from '../ui/StatCard';
 import { LoanRow } from '../ui/LoanRow';
 import { formatINR } from '../../lib/formatters';
@@ -10,6 +10,7 @@ import { GoalsCard } from './GoalsCard';
 import { useFinance } from '../../contexts/FinanceContext';
 import { getNextBestAction } from '../../lib/advisor';
 import { UserProfileSchema } from '../../lib/types';
+import { ProfileEditModal } from './ProfileEditModal';
 
 interface DashboardSectionProps {
   income: number;
@@ -29,6 +30,7 @@ export function DashboardSection({
   onLoanClose,
 }: DashboardSectionProps) {
   const { profile } = useFinance();
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const strategyResults: any[] = []; // removed financialMath compareStrategies
 
@@ -73,6 +75,7 @@ export function DashboardSection({
 
   return (
     <>
+      {isEditModalOpen && <ProfileEditModal onClose={() => setIsEditModalOpen(false)} />}
       {/* Left Column: Command Center */}
       <div className="col-span-12 lg:col-span-8 space-y-14">
         
@@ -91,11 +94,16 @@ export function DashboardSection({
           <StatCard label="Net Worth" value={formatINR(metrics.netWorth, true, isPrivacyMode)} isPrivacyMode={isPrivacyMode} />
           <StatCard label="Monthly Income" value={formatINR(income, true, isPrivacyMode)} isPrivacyMode={isPrivacyMode} />
           <StatCard label="Monthly Cash Flow" value={formatINR(metrics.monthlyCashFlow, true, isPrivacyMode)} isPrivacyMode={isPrivacyMode} trend={metrics.monthlyCashFlow > 0 ? "up" : "down"} />
-          <div className="bg-[#18181f] border border-white/8 rounded-xl p-6 flex flex-col justify-center items-center relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-[#F27D26]/10 to-transparent"></div>
+          <div 
+            onClick={() => setIsEditModalOpen(true)}
+            className="bg-[#18181f] border border-white/8 rounded-xl p-6 flex flex-col justify-center items-center relative overflow-hidden cursor-pointer hover:border-[#F27D26]/50 transition-colors group"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-[#F27D26]/10 to-transparent group-hover:from-[#F27D26]/20 transition-colors"></div>
             <Activity className="w-6 h-6 text-[#F27D26] mb-2 z-10" />
-            <div className="text-3xl font-bold font-mono text-white z-10">{metrics.financialHealthScore}</div>
-            <div className="text-[10px] uppercase tracking-widest opacity-60 z-10 mt-1">Health Score</div>
+            <div className="text-3xl font-bold font-mono text-white z-10 flex items-center gap-2">
+              {metrics.financialHealthScore}
+            </div>
+            <div className="text-[10px] uppercase tracking-widest opacity-60 z-10 mt-1 flex items-center gap-1 group-hover:text-[#F27D26] transition-colors"><Edit3 size={10} /> Edit Profile</div>
           </div>
         </div>
 

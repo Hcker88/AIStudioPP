@@ -8,6 +8,7 @@ import { generateInsights } from '../lib/insights';
 import { getNextBestAction } from '../lib/advisor';
 import { fetchUserProfile, saveUserProfile } from '../lib/profileDb';
 
+
 export interface ChatResponse {
   insights: string[];
   nextAction: string;
@@ -22,6 +23,7 @@ interface FinanceContextType {
   logout: () => Promise<void>;
   processChatMessage: (message: string) => Promise<ChatResponse>;
   refreshProfile: () => Promise<void>;
+  updateProfile: (updates: Partial<UserProfileSchema>) => Promise<void>;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -112,8 +114,37 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       }
 
       // 1. & 2. Parse input and extract data safely
-      const updatedProfile = parseMessage(message, profile);
+      const { updatedProfile, identifiedIntent } = parseMessage(message, profile);
       
+      if (!identifiedIntent) {
+        const profileSummaryStr = `Net Worth: ₹${profile.metrics?.netWorth}
+Income: ₹${profile.income}
+Expenses: ₹${profile.expenses}
+Loans: ${JSON.stringify(profile.loans)}
+Assets: ${JSON.stringify(profile.assets)}`;
+
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message,
+            history: profile.chatHistory || [],
+            profileSummary: profileSummaryStr,
+          })
+        });
+        
+        let responseData = { text: "I'm here to help." };
+        if (response.ok) {
+           responseData = await response.json();
+        }
+        
+        return {
+           insights: [],
+           nextAction: "",
+           summary: responseData.text || "I'm here to help."
+        };
+      }
+
       // 3. Recalculate metrics
       const netWorth = calculateNetWorth(updatedProfile);
       const savingsRate = calculateSavingsRate(updatedProfile);
@@ -164,8 +195,20 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateProfile = async (updates: Partial<UserProfileSchema>): Promise<void> => {
+    if (!user || !profile) return;
+    const updatedProfile = { ...profile, ...updates };
+    setProfile(updatedProfile);
+    try {
+      await saveUserProfile(user.uid, updatedProfile);
+    } catch (e) {
+      console.error("Failed to save profile updates:", e);
+      // optionally revert
+    }
+  };
+
   return (
-    <FinanceContext.Provider value={{ user, profile, loading, login, logout, processChatMessage, refreshProfile }}>
+    <FinanceContext.Provider value={{ user, profile, loading, login, logout, processChatMessage, refreshProfile, updateProfile }}>
       {children}
     </FinanceContext.Provider>
   );

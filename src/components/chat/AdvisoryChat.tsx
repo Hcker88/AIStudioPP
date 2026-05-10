@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageSquare, Send, ShieldCheck } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
@@ -11,7 +11,7 @@ interface Message {
 }
 
 export function AdvisoryChat() {
-  const { profile, processChatMessage } = useFinance();
+  const { profile, processChatMessage, updateProfile } = useFinance();
   const highestLoan = profile?.loans?.length ? Math.max(...profile.loans) : null;
   const highestLoanName = highestLoan ? `Loan (₹${highestLoan.toLocaleString('en-IN')})` : "Debt Free";
   const highestLoanRate = highestLoan ? 15 : 0; // Using a default 15% rate since we only have principal
@@ -19,7 +19,7 @@ export function AdvisoryChat() {
   const msIn7Days = 7 * 24 * 60 * 60 * 1000;
   const isStale = profile?.lastUpdated ? (Date.now() - profile.lastUpdated) > msIn7Days : false;
 
-  const getInitialMessage = () => {
+  const initialMessage = useMemo(() => {
     let msg = `I'm analyzing your real-time financial data. `;
     if (highestLoan) msg += `Your ${highestLoanName} at ${highestLoanRate}% is the primary target. `;
     if (isStale) {
@@ -28,11 +28,21 @@ export function AdvisoryChat() {
       msg += `You can tell me about new income, expenses, or investments here.`;
     }
     return msg;
-  };
+  }, [highestLoan, highestLoanName, highestLoanRate, isStale]);
 
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: getInitialMessage() }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const hasInitialized = useRef(false);
+
+  useEffect(() => {
+    if (profile && !hasInitialized.current) {
+      if (profile.chatHistory && profile.chatHistory.length > 0) {
+        setMessages(profile.chatHistory);
+      } else {
+        setMessages([{ role: 'assistant', content: initialMessage }]);
+      }
+      hasInitialized.current = true;
+    }
+  }, [profile, initialMessage]);
 
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -48,7 +58,8 @@ export function AdvisoryChat() {
     if (!text.trim()) return;
 
     const userMsg: Message = { role: 'user', content: text };
-    setMessages(prev => [...prev, userMsg]);
+    const updatedMsgs = [...messages, userMsg];
+    setMessages(updatedMsgs);
     setInput('');
     setIsTyping(true);
 
@@ -61,10 +72,17 @@ export function AdvisoryChat() {
       }
       if (response.nextAction) content += `**🎯 Next Action**: ${response.nextAction}`;
       
-      setMessages(prev => [...prev, { role: 'assistant', content: content.trim() }]);
+      const assistantMsg: Message = { role: 'assistant', content: content.trim() };
+      const finalMsgs = [...updatedMsgs, assistantMsg];
+      setMessages(finalMsgs);
+      
+      // Persist to profile
+      updateProfile({ chatHistory: finalMsgs as any });
     } catch (error: any) {
       console.error('Chat error:', error);
-      setMessages(prev => [...prev, { role: 'assistant', content: error.message || 'I encountered an error processing your request. Please try again.' }]);
+      const errorMsg: Message = { role: 'assistant', content: error.message || 'I encountered an error processing your request. Please try again.' };
+      setMessages(prev => [...prev, errorMsg]);
+      updateProfile({ chatHistory: [...updatedMsgs, errorMsg] as any });
     } finally {
       setIsTyping(false);
     }

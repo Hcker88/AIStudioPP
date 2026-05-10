@@ -120,6 +120,7 @@ export interface UserProfileSchema {
   history: { snapshot: any; timestamp: number }[];
   lastUpdated: number;
   insights?: string[];
+  chatHistory?: { role: 'user' | 'assistant'; content: string; timestamp: number }[];
   metrics?: {
     netWorth: number;
     savingsRate: number;
