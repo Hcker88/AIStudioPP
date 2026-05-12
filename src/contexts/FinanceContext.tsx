@@ -123,9 +123,13 @@ Expenses: ₹${profile.expenses}
 Loans: ${JSON.stringify(profile.loans)}
 Assets: ${JSON.stringify(profile.assets)}`;
 
+        const token = await auth.currentUser?.getIdToken();
         const response = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
           body: JSON.stringify({
             message,
             history: profile.chatHistory || [],

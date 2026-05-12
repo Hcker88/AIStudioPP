@@ -46,16 +46,8 @@ export async function fetchUserProfile(userId: string): Promise<UserProfileSchem
 export async function saveUserProfile(userId: string, profile: UserProfileSchema, retries = 3): Promise<void> {
   const auth = getAuth();
   if (!auth.currentUser || auth.currentUser.uid !== userId) {
-    const errInfo = {
-      error: "Missing or insufficient permissions.",
-      operationType: "write",
-      path: `users/${userId}/profile/current`,
-      authInfo: {
-        userId: auth.currentUser?.uid,
-        email: auth.currentUser?.email
-      }
-    };
-    throw new Error(JSON.stringify(errInfo));
+    console.error('Profile save failed: auth mismatch for path', `users/${userId}/profile/current`);
+    throw new Error('Profile save failed: authentication error');
   }
 
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -82,14 +74,8 @@ export async function saveUserProfile(userId: string, profile: UserProfileSchema
       return; // Success
     } catch (error: any) {
       if (error.message && error.message.includes("Missing or insufficient permissions")) {
-        const errInfo = {
-           error: error.message,
-           operationType: 'write',
-           path: `users/${userId}/profile/current`,
-           authInfo: { userId: auth.currentUser?.uid }
-        };
-        console.error('Firestore Error: ', JSON.stringify(errInfo));
-        throw new Error(JSON.stringify(errInfo));
+         console.error('Profile save failed: auth mismatch for path', `users/${userId}/profile/current`);
+         throw new Error('Profile save failed: authentication error');
       }
       
       console.error(`Error saving user profile (Attempt ${attempt}/${retries}):`, error);
